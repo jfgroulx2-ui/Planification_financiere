@@ -11,6 +11,9 @@
   --accent: #0f766e;
   --accent-soft: rgba(15, 118, 110, 0.14);
   --danger: #b45309;
+  --success: #2f855a;
+  --success-soft: rgba(47, 133, 90, 0.14);
+  --danger-soft: rgba(180, 83, 9, 0.14);
   --shadow: 0 16px 48px rgba(63, 42, 16, 0.08);
   font-family: "Segoe UI", "Aptos", sans-serif;
 }
@@ -70,7 +73,8 @@ input {
 .status-pill,
 li,
 .field-help,
-.result-detail {
+.result-detail,
+.section-copy {
   color: var(--muted);
 }
 
@@ -81,7 +85,7 @@ li,
 .workspace {
   display: grid;
   gap: 1rem;
-  grid-template-columns: minmax(380px, 1.05fr) minmax(420px, 1fr);
+  grid-template-columns: minmax(390px, 1.05fr) minmax(430px, 1fr);
   align-items: start;
 }
 
@@ -117,7 +121,13 @@ li,
 .card h2,
 .card h3 {
   margin-top: 0;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.section-copy {
+  margin-top: 0;
+  margin-bottom: 0.9rem;
+  line-height: 1.5;
 }
 
 .field-grid {
@@ -210,6 +220,19 @@ li,
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
+.guide-grid {
+  align-items: stretch;
+}
+
+.guide-card {
+  min-height: 100%;
+}
+
+.explanation-card {
+  border-color: rgba(15, 118, 110, 0.18);
+  background: linear-gradient(180deg, var(--surface-elevated), rgba(15, 118, 110, 0.06));
+}
+
 .result-grid {
   align-items: stretch;
 }
@@ -224,6 +247,16 @@ li,
 .result-card {
   display: grid;
   align-content: start;
+}
+
+.result-card.is-alert {
+  border-color: rgba(180, 83, 9, 0.24);
+  background: linear-gradient(180deg, var(--surface-elevated), var(--danger-soft));
+}
+
+.result-card.is-success {
+  border-color: rgba(47, 133, 90, 0.24);
+  background: linear-gradient(180deg, var(--surface-elevated), var(--success-soft));
 }
 
 .metric {
@@ -254,6 +287,21 @@ li,
   display: block;
   margin-top: 0.25rem;
   font-size: 1.05rem;
+}
+
+.chart-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+.chart-card {
+  min-height: 360px;
+}
+
+.chart-shell {
+  height: 260px;
+  margin-top: 0.5rem;
 }
 
 .warning {
@@ -299,7 +347,12 @@ ul {
   }
 
   .field-grid,
-  .notes-grid {
+  .notes-grid,
+  .chart-grid {
     grid-template-columns: 1fr;
+  }
+
+  .chart-card {
+    min-height: 330px;
   }
 }
