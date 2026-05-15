@@ -1,0 +1,136 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f5efe4;
+  --surface: rgba(255, 250, 242, 0.86);
+  --surface-strong: rgba(255, 247, 235, 0.96);
+  --text: #1f1b16;
+  --muted: #675b4f;
+  --line: rgba(82, 64, 43, 0.18);
+  --accent: #0f766e;
+  --accent-soft: rgba(15, 118, 110, 0.14);
+  --danger: #b45309;
+  font-family: "Segoe UI", "Aptos", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(15, 118, 110, 0.12), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(180, 83, 9, 0.12), transparent 22%),
+    linear-gradient(180deg, #f7f1e8 0%, #efe6d7 100%);
+  color: var(--text);
+}
+
+a {
+  color: inherit;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.page-shell {
+  width: min(1120px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 2rem 0 3rem;
+}
+
+.hero {
+  display: grid;
+  gap: 1rem;
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: linear-gradient(135deg, var(--surface-strong), rgba(244, 234, 218, 0.92));
+  box-shadow: 0 16px 48px rgba(63, 42, 16, 0.08);
+}
+
+.hero h1,
+.section-title {
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.hero p,
+.card p,
+.status-pill,
+li {
+  color: var(--muted);
+}
+
+.card-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  margin-top: 1.25rem;
+}
+
+.card {
+  padding: 1rem;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  backdrop-filter: blur(10px);
+}
+
+.card h2,
+.card h3 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: fit-content;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.metric {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.section {
+  margin-top: 1.5rem;
+}
+
+.warning {
+  border-left: 4px solid var(--danger);
+  padding-left: 0.9rem;
+}
+
+code {
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 0.95em;
+}
+
+ul {
+  margin: 0.75rem 0 0;
+  padding-left: 1rem;
+}
+
+@media (max-width: 640px) {
+  .page-shell {
+    width: min(100% - 1rem, 1120px);
+    padding-top: 1rem;
+  }
+
+  .hero,
+  .card {
+    border-radius: 18px;
+  }
+}
