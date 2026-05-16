@@ -37,7 +37,8 @@ a {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -80,6 +81,11 @@ li,
 
 .section {
   margin-top: 1.5rem;
+}
+
+.stack {
+  display: grid;
+  gap: 1rem;
 }
 
 .workspace {
@@ -178,6 +184,11 @@ li,
   color: var(--text);
 }
 
+.input-select {
+  appearance: none;
+  cursor: pointer;
+}
+
 .input-suffix {
   flex: none;
   color: var(--muted);
@@ -220,6 +231,28 @@ li,
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
+.tabs-shell {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.tab-button {
+  padding: 0.7rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-elevated);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.tab-button.is-active {
+  border-color: transparent;
+  background: var(--accent);
+  color: #f7faf9;
+}
+
 .guide-grid {
   align-items: stretch;
 }
@@ -231,6 +264,12 @@ li,
 .explanation-card {
   border-color: rgba(15, 118, 110, 0.18);
   background: linear-gradient(180deg, var(--surface-elevated), rgba(15, 118, 110, 0.06));
+}
+
+.locked-card {
+  margin-top: 1rem;
+  border-color: rgba(180, 83, 9, 0.24);
+  background: linear-gradient(180deg, var(--surface-elevated), rgba(180, 83, 9, 0.08));
 }
 
 .result-grid {
@@ -275,6 +314,31 @@ li,
 
 .notes-card {
   margin-top: 1rem;
+}
+
+.table-shell {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+}
+
+.data-table th,
+.data-table td {
+  padding: 0.8rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.data-table th {
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .notes-grid {
