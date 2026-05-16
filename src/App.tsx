@@ -121,18 +121,12 @@ const etatInitial: EtatSaisie = {
   ageVenteMaison: 75,
 };
 
-const OPTIONS_PROVINCE: ReadonlyArray<{
-  value: ProvinceResidence;
-  label: string;
-}> = [
+const OPTIONS_PROVINCE: ReadonlyArray<{ value: ProvinceResidence; label: string }> = [
   { value: "QC", label: "Québec" },
   { value: "AUTRE", label: "Autre province" },
 ];
 
-const OPTIONS_STATUT_MARITAL: ReadonlyArray<{
-  value: StatutMarital;
-  label: string;
-}> = [
+const OPTIONS_STATUT_MARITAL: ReadonlyArray<{ value: StatutMarital; label: string }> = [
   { value: "celibataire", label: "Célibataire" },
   { value: "marie", label: "Marié" },
   { value: "conjoint_de_fait", label: "Conjoint de fait" },
@@ -545,7 +539,7 @@ export default function App() {
             croissanceImmobiliere: hypothesesIqpf.immobilier.residencePrincipale,
           })
         : null,
-    [etat, hypothesesIqpf, partImmobiliere, profil, profilValide],
+    [etat, partImmobiliere, profil, profilValide],
   );
 
   const nombreAnneesDecaissement = Math.max(1, profil.esperanceVie - profil.ageRetraite);
@@ -578,7 +572,6 @@ export default function App() {
       etat.proportionCotisationRrq,
       etat.rendementAnnuelDecaissement,
       etat.retraitAnnuelInitialDecaissement,
-      hypothesesIqpf.immobilier.residencePrincipale,
       nombreAnneesDecaissement,
     ],
   );
@@ -684,7 +677,7 @@ export default function App() {
   );
 
   function mettreAJour<K extends keyof EtatSaisie>(cle: K, valeur: EtatSaisie[K]) {
-    setEtat((etatCourant) => ({ ...etatCourant, [cle]: valeur }));
+    setEtat((courant) => ({ ...courant, [cle]: valeur }));
   }
 
   function reinitialiser() {
@@ -746,7 +739,7 @@ export default function App() {
             <ChampNombre etiquette="Solde CELI" valeur={etat.soldeCeliInitial} pas={1000} min={0} suffixe="$" onChange={(valeur) => mettreAJour("soldeCeliInitial", valeur)} />
             <ChampNombre etiquette="Solde non enregistré" valeur={etat.soldeNonEnregistreInitial} pas={1000} min={0} suffixe="$" onChange={(valeur) => mettreAJour("soldeNonEnregistreInitial", valeur)} />
             <ChampNombre etiquette="Valeur marchande de la maison" valeur={etat.valeurImmobiliereInitiale} pas={1000} min={0} suffixe="$" onChange={(valeur) => mettreAJour("valeurImmobiliereInitiale", valeur)} />
-            <ChampNombre etiquette="Votre part de la propriété" valeur={etat.partUtilisateurImmobilier} pas={1} min={0} max={100} suffixe="%" aide="Exemple: 50 % si la propriété est détenue à parts égales." onChange={(valeur) => mettreAJour("partUtilisateurImmobilier", valeur)} />
+            <ChampNombre etiquette="Votre part de la propriété" valeur={etat.partUtilisateurImmobilier} pas={1} min={0} max={100} suffixe="%" aide="Exemple : 50 % si la propriété est détenue à parts égales." onChange={(valeur) => mettreAJour("partUtilisateurImmobilier", valeur)} />
           </div>
         </section>
       </div>
@@ -763,7 +756,7 @@ export default function App() {
         <div className="card-grid result-grid">
           <CarteResultat titre="Score d'épargne" valeur={`${scoreEpargne.score} / 5`} description={`${scoreEpargne.libelle} — ${scoreEpargne.plageTauxEpargne}`} detail={scoreEpargne.commentaireConseiller} tonalite={scoreEpargne.score >= 4 ? "success" : scoreEpargne.score <= 2 ? "alert" : "default"} />
           <CarteResultat titre="Revenu net après prélèvements" valeur={formatMonetaire(revenuApresImpotEtCotisations)} description="Ce qu'il reste aujourd'hui après impôts et cotisations." detail={calculerTexteCapaciteEpargne(revenuApresImpotEtCotisations)} />
-          <CarteResultat title="" titre="Début de retraite" valeur={formatMonetaire(accumulation.valeurNetteTotaleRetraite)} description={`Au 1er janvier ${accumulation.anneeRetraite}, à ${accumulation.ageRetraite} ans.`} detail={`REER ${formatMonetaire(accumulation.capitalReerRetraite)} | CELI ${formatMonetaire(accumulation.capitalCeliRetraite)} | Non enregistré ${formatMonetaire(accumulation.capitalNonEnregistreRetraite)}`} />
+          <CarteResultat titre="Début de retraite" valeur={formatMonetaire(accumulation.valeurNetteTotaleRetraite)} description={`Au 1er janvier ${accumulation.anneeRetraite}, à ${accumulation.ageRetraite} ans.`} detail={`REER ${formatMonetaire(accumulation.capitalReerRetraite)} | CELI ${formatMonetaire(accumulation.capitalCeliRetraite)} | Non enregistré ${formatMonetaire(accumulation.capitalNonEnregistreRetraite)}`} />
           <CarteResultat titre="Objectif suggéré de décaissement" valeur={formatMonetaire(accumulation.objectifDecaissementSuggereRetraite)} description="Suggestion basée sur les dépenses projetées au début de la retraite." detail={`Dépenses ${formatMonetaire(accumulation.depensesProjeteesRetraite)} | Hypothèque ${formatMonetaire(accumulation.serviceHypothecaireRetraiteEstime)}`} />
           <CarteResultat titre="Fin de retraite projetée" valeur={formatMonetaire(simulationDecaissement.capitalFinalTotal)} description="Capital estimé à la fin de l'horizon de retraite." detail={calculerTexteDecaissement(simulationDecaissement.capitalEpuise, simulationDecaissement.anneeEpuisement)} tonalite={simulationDecaissement.capitalEpuise ? "alert" : "success"} />
           <CarteResultat titre="Écart sur l'objectif la première année" valeur={formatMonetaire(premiereAnneeRetraite?.ecartObjectifNet ?? 0)} description="Net disponible moins objectif suggéré de retraite." detail={etat.ageVenteMaison > 0 ? `Vente de la maison prévue à ${etat.ageVenteMaison} ans.` : "Aucune vente de maison prévue."} tonalite={(premiereAnneeRetraite?.ecartObjectifNet ?? 0) >= 0 ? "success" : "alert"} />
@@ -835,7 +828,11 @@ export default function App() {
       <div className="stack">
         <div className="card-grid result-grid">
           <CarteResultat titre="Impôt fédéral" valeur={formatMonetaire(impotFederal.impotNet)} description="Estimation simple pour l'année courante." />
-          <CarteResultat titre="Impôt Québec" valeur={formatMonetaire(impotQuebec.impotNet)} description={modeQuebec ? "Estimation simple pour l'année courante." : "Le moteur détaillé actuel demeure surtout calibré pour le Québec."} />
+          <CarteResultat
+            titre={modeQuebec ? "Impôt Québec" : "Impôt provincial"}
+            valeur={formatMonetaire(impotQuebec.impotNet)}
+            description={modeQuebec ? "Estimation simple pour l'année courante." : "Le moteur détaillé actuel demeure surtout calibré pour le Québec."}
+          />
           <CarteResultat titre="Droits REER estimés" valeur={formatMonetaire(droitsREER)} description="Espace REER généré par le revenu gagné l'an dernier." />
           <CarteResultat titre="Espace CELI disponible" valeur={formatMonetaire(droitsCELI)} description="Espace encore disponible selon les données saisies." />
         </div>
@@ -858,7 +855,7 @@ export default function App() {
           <CarteResultat titre="REER à la retraite" valeur={formatMonetaire(accumulation.capitalReerRetraite)} description={`Au 1er janvier ${accumulation.anneeRetraite}, à ${accumulation.ageRetraite} ans.`} />
           <CarteResultat titre="CELI à la retraite" valeur={formatMonetaire(accumulation.capitalCeliRetraite)} description="Capital projeté dans le CELI au début de la retraite." />
           <CarteResultat titre="Non enregistré à la retraite" valeur={formatMonetaire(accumulation.capitalNonEnregistreRetraite)} description="Capital projeté hors comptes enregistrés." />
-          <CarteResultat titre="Valeur nette immobilière" valeur={formatMonetaire(accumulation.valeurNetteImmobiliereRetraite)} description={`Votre part retenue: ${formatPourcentage(etat.partUtilisateurImmobilier)}.`} />
+          <CarteResultat titre="Valeur nette immobilière" valeur={formatMonetaire(accumulation.valeurNetteImmobiliereRetraite)} description={`Votre part retenue : ${formatPourcentage(etat.partUtilisateurImmobilier)}.`} />
         </div>
         <section className="panel">
           <h2 className="section-title">Projection année par année</h2>
@@ -929,7 +926,7 @@ export default function App() {
         </section>
         <div className="card-grid result-grid">
           <CarteResultat titre="Paiement par versement complet" valeur={formatMonetaire(paiementHypothecaireComplet)} description="Calcul canadien à capitalisation semi-annuelle." />
-          <CarteResultat titre="Votre paiement par versement" valeur={formatMonetaire(paiementHypothecaireUtilisateur)} description={`Quote-part retenue: ${formatPourcentage(etat.partUtilisateurImmobilier)}.`} />
+          <CarteResultat titre="Votre paiement par versement" valeur={formatMonetaire(paiementHypothecaireUtilisateur)} description={`Quote-part retenue : ${formatPourcentage(etat.partUtilisateurImmobilier)}.`} />
           <CarteResultat titre="Votre équivalent mensuel" valeur={formatMonetaire(equivalentMensuelHypotheque)} description={calculerTexteHypotheque(equivalentMensuelHypotheque)} />
         </div>
       </div>
