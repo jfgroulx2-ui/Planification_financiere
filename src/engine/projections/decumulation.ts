@@ -1,5 +1,5 @@
-import { calculerRecuperationPsv2025, estimerPsv2025 } from "../pension/psv";
 import { estimerRenteRrq2025 } from "../pension/rrq";
+import { calculerRecuperationPsv2025, estimerPsv2025 } from "../pension/psv";
 import { calculerImpotFederal2025 } from "../tax/federal";
 import { calculerImpotQuebec2025 } from "../tax/quebec";
 import { arrondir2 } from "../tax/shared";
@@ -38,7 +38,12 @@ export interface EntreeDecaissementRetraite {
   soldeReerInitial: number;
   soldeCeliInitial: number;
   soldeNonEnregistreInitial: number;
+  valeurImmobiliereInitiale?: number;
+  soldeHypothecaireInitial?: number;
+  croissanceImmobiliere?: number;
+  ageVenteMaison?: number | null;
   retraitAnnuelCibleInitial: number;
+  objectifNetAnnuel?: number;
   rendementReer: number;
   rendementCeli: number;
   rendementNonEnregistre: number;
@@ -65,6 +70,13 @@ export interface PointDecaissementRetraite {
   revenuImposableTotal: number;
   impotTotal: number;
   netDisponible: number;
+  objectifNetAnnuel: number;
+  ecartObjectifNet: number;
+  venteMaison: number;
+  valeurImmobiliereDebut: number;
+  valeurImmobiliereFin: number;
+  soldeHypothecaireDebut: number;
+  soldeHypothecaireFin: number;
   recuperationPsv: number;
   soldeReerDebut: number;
   soldeCeliDebut: number;
@@ -79,6 +91,7 @@ export interface ResultatDecaissementRetraite {
   capitalFinalTotal: number;
   capitalEpuise: boolean;
   anneeEpuisement: number | null;
+  objectifNetAnnuel: number;
   points: PointDecaissementRetraite[];
 }
 
@@ -133,7 +146,7 @@ function calculerRetraitsClassiques(
   soldeNonEnregistre: number,
   soldeReer: number,
   soldeCeli: number,
-) {
+): { retraitNonEnregistre: number; retraitReer: number; retraitCeli: number } {
   let restant = retraitCible;
   const retraitNonEnregistre = Math.min(soldeNonEnregistre, restant);
   restant -= retraitNonEnregistre;
@@ -149,7 +162,17 @@ function calculerRetraitsClassiques(
 }
 
 /**
- * Simule un décaissement de retraite en années calendaires avec RRQ et PSV.
+ * Simule un décaissement de retraite en années calendaires avec l'âge affiché.
+ *
+ * Hypothèses de travail :
+ * - stratégie classique : non enregistré, puis REER/FERR, puis CELI ;
+ * - RRQ et PSV sont estimés automatiquement selon les paramètres d'entrée ;
+ * - la récupération PSV est calculée à 15 % de l'excédent au-delà du seuil ;
+ * - les retraits non enregistrés sont traités comme non imposables dans cette V1 ;
+ * - la maison peut être vendue à un âge donné, et le produit net est versé
+ *   dans le non enregistré au début de cette année ;
+ * - après le début de la retraite, le solde hypothécaire résiduel est conservé
+ *   constant jusqu'à la vente ou jusqu'à la fin de l'horizon.
  */
 export function simulerDecaissementRetraite(
   entree: EntreeDecaissementRetraite,
@@ -157,11 +180,18 @@ export function simulerDecaissementRetraite(
   let soldeReer = Math.max(0, entree.soldeReerInitial);
   let soldeCeli = Math.max(0, entree.soldeCeliInitial);
   let soldeNonEnregistre = Math.max(0, entree.soldeNonEnregistreInitial);
+  let valeurImmobiliere = Math.max(0, entree.valeurImmobiliereInitiale ?? 0);
+  let soldeHypothecaire = Math.max(0, entree.soldeHypothecaireInitial ?? 0);
   let retraitCible = Math.max(0, entree.retraitAnnuelCibleInitial);
   let anneeEpuisement: number | null = null;
+  let maisonVendue = valeurImmobiliere === 0;
   const points: PointDecaissementRetraite[] = [];
   const capitalInitialTotal = arrondir2(
     soldeReer + soldeCeli + soldeNonEnregistre,
+  );
+  const objectifNetAnnuel = Math.max(
+    0,
+    entree.objectifNetAnnuel ?? entree.retraitAnnuelCibleInitial,
   );
 
   for (let index = 0; index < entree.nombreAnnees; index += 1) {
@@ -169,7 +199,26 @@ export function simulerDecaissementRetraite(
     const age = entree.ageDebut + index;
     const soldeReerDebut = soldeReer;
     const soldeCeliDebut = soldeCeli;
-    const soldeNonEnregistreDebut = soldeNonEnregistre;
+    const valeurImmobiliereDebut = valeurImmobiliere;
+    const soldeHypothecaireDebut = soldeHypothecaire;
+    let soldeNonEnregistreDebut = soldeNonEnregistre;
+    let venteMaison = 0;
+
+    if (
+      !maisonVendue &&
+      entree.ageVenteMaison !== null &&
+      entree.ageVenteMaison !== undefined &&
+      age >= entree.ageVenteMaison
+    ) {
+      venteMaison = arrondir2(
+        Math.max(0, valeurImmobiliereDebut - soldeHypothecaireDebut),
+      );
+      soldeNonEnregistreDebut += venteMaison;
+      valeurImmobiliere = 0;
+      soldeHypothecaire = 0;
+      maisonVendue = true;
+    }
+
     const retraits = calculerRetraitsClassiques(
       retraitCible,
       soldeNonEnregistreDebut,
@@ -212,8 +261,14 @@ export function simulerDecaissementRetraite(
     soldeNonEnregistre =
       (soldeNonEnregistreDebut - retraits.retraitNonEnregistre) *
       (1 + entree.rendementNonEnregistre);
-    soldeReer = (soldeReerDebut - retraits.retraitReer) * (1 + entree.rendementReer);
-    soldeCeli = (soldeCeliDebut - retraits.retraitCeli) * (1 + entree.rendementCeli);
+    soldeReer =
+      (soldeReerDebut - retraits.retraitReer) * (1 + entree.rendementReer);
+    soldeCeli =
+      (soldeCeliDebut - retraits.retraitCeli) * (1 + entree.rendementCeli);
+
+    if (!maisonVendue) {
+      valeurImmobiliere = valeurImmobiliere * (1 + (entree.croissanceImmobiliere ?? 0));
+    }
 
     if (retraitTotalBrut < retraitCible && anneeEpuisement === null) {
       anneeEpuisement = annee;
@@ -233,6 +288,13 @@ export function simulerDecaissementRetraite(
       revenuImposableTotal: arrondir2(revenuImposableTotal),
       impotTotal,
       netDisponible,
+      objectifNetAnnuel: arrondir2(objectifNetAnnuel),
+      ecartObjectifNet: arrondir2(netDisponible - objectifNetAnnuel),
+      venteMaison,
+      valeurImmobiliereDebut: arrondir2(valeurImmobiliereDebut),
+      valeurImmobiliereFin: arrondir2(valeurImmobiliere),
+      soldeHypothecaireDebut: arrondir2(soldeHypothecaireDebut),
+      soldeHypothecaireFin: arrondir2(soldeHypothecaire),
       recuperationPsv: recuperationPsv.montantRecuperation,
       soldeReerDebut: arrondir2(soldeReerDebut),
       soldeCeliDebut: arrondir2(soldeCeliDebut),
@@ -250,6 +312,7 @@ export function simulerDecaissementRetraite(
     capitalFinalTotal: arrondir2(soldeReer + soldeCeli + soldeNonEnregistre),
     capitalEpuise: anneeEpuisement !== null,
     anneeEpuisement,
+    objectifNetAnnuel: arrondir2(objectifNetAnnuel),
     points,
   };
 }
@@ -262,6 +325,9 @@ export interface EntreeDecaissementDepuisAccumulation
     | "soldeReerInitial"
     | "soldeCeliInitial"
     | "soldeNonEnregistreInitial"
+    | "valeurImmobiliereInitiale"
+    | "soldeHypothecaireInitial"
+    | "objectifNetAnnuel"
   > {}
 
 /**
@@ -278,5 +344,8 @@ export function simulerDecaissementDepuisAccumulation(
     soldeReerInitial: accumulation.capitalReerRetraite,
     soldeCeliInitial: accumulation.capitalCeliRetraite,
     soldeNonEnregistreInitial: accumulation.capitalNonEnregistreRetraite,
+    valeurImmobiliereInitiale: accumulation.valeurImmobiliereRetraite,
+    soldeHypothecaireInitial: accumulation.soldeHypothecaireRetraite,
+    objectifNetAnnuel: accumulation.objectifDecaissementSuggereRetraite,
   });
 }
