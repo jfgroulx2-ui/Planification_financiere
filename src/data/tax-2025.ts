@@ -4,15 +4,16 @@ export interface PalierImposition {
 }
 
 /**
- * Parametres fiscaux 2025 utilises par les premiers modules du moteur.
+ * Paramètres fiscaux 2025 utilisés par les premiers modules du moteur.
  *
  * Sources officielles :
- * - CRA: taux d'impot des particuliers 2025, montant personnel de base 2025,
- *   plafond REER 2025, droits CELI, minimum RRIF, assurance-emploi
- * - Revenu Quebec: tables d'impot 2025 et RQAP
- * - Retraite Quebec: RRQ 2025 (MGA, MSGA, taux)
+ * - ARC : taux d'impôt des particuliers 2025, montant personnel de base 2025,
+ *   plafond REER 2025, droits CELI, minimum FERR, assurance-emploi
+ * - Revenu Québec : tables d'impôt 2025 et RQAP
+ * - Retraite Québec : RRQ 2025 (MGA, MSGA, taux et rente maximale)
+ * - Service Canada / ARC : PSV 2025-2026 et seuil de récupération 2025
  *
- * Verification manuelle effectuee le 2026-05-10.
+ * Vérification manuelle effectuée le 2026-05-16.
  */
 export const donneesFiscales2025 = {
   annee: 2025,
@@ -24,7 +25,7 @@ export const donneesFiscales2025 = {
     quebec:
       "https://www.revenuquebec.ca/fr/citoyens/declaration-de-revenus/produire-votre-declaration-de-revenus/comment-remplir-votre-declaration/aide-par-ligne/350-a-398-1-calcul-du-revenu-imposable-et-de-limpot-a-payer/401-a-440-impot-a-payer/",
     rrq:
-      "https://www.retraitequebec.gouv.qc.ca/fr/programmes/regime_rentes/cotisation/Pages/cotisation.aspx",
+      "https://www.retraitequebec.gouv.qc.ca/fr/landing/indexation/Pages/montants-donnees-base-2025.aspx",
     rqap:
       "https://www.rqap.gouv.qc.ca/fr/a-propos-du-regime/taux-de-cotisation-et-revenu-maximal",
     ae:
@@ -33,6 +34,10 @@ export const donneesFiscales2025 = {
       "https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/rrsps-related-plans/contributions/contributions-affect-your-rrsp-pr-limit.html",
     celi:
       "https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/tax-free-savings-account/contributions.html",
+    psvPaiements:
+      "https://www.canada.ca/en/services/benefits/publicpensions/old-age-security/payments.html",
+    psvRecuperation:
+      "https://www.canada.ca/en/revenue-agency/services/tax/international-non-residents/individuals-leaving-entering-canada-non-residents/old-security-return-income-oasri.html",
   },
   federal: {
     tauxCreditNonRemboursable: 0.145,
@@ -92,6 +97,29 @@ export const donneesFiscales2025 = {
     assuranceEmploiQuebec: {
       maximumRevenuAssurable: 65700,
       tauxEmploye: 0.0131,
+    },
+  },
+  pension: {
+    rrqRetraite: {
+      ageNormal: 65,
+      ageMinimal: 60,
+      ageMaximalBonifie: 72,
+      renteMensuelleMaximale65: 1433,
+      facteurReductionMensuelAvant65: 0.006,
+      facteurBonificationMensuelApres65: 0.007,
+      proportionCotisationMaximaleParDefaut: 1,
+      anneesCotisationMaximumParDefaut: 39,
+    },
+    psv: {
+      ageMinimal: 65,
+      ageMaximalBonifie: 70,
+      facteurBonificationMensuelApres65: 0.006,
+      montantMensuelMaximal65a74: 743.05,
+      montantMensuelMaximal75Plus: 817.36,
+      ageMajoration75Plus: 75,
+      tauxRecuperation: 0.15,
+      seuilRecuperation2025: 93454,
+      anneesResidencePleine: 40,
     },
   },
   reer: {
