@@ -13,67 +13,142 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { hypothesesIqpf2026 } from "./data/assumptions-iqpf-2026";
+import { hypothesesIqpf } from "./data/assumptions-iqpf";
 import { calculerDroitsREER } from "./engine/accounts/rrsp";
 import { calculerDroitsCELIDisponibles } from "./engine/accounts/tfsa";
 import { calculerPaiementHypothecaireCanadien } from "./engine/mortgage/canadian-amortization";
-import { simulerDecaissementAnnuel } from "./engine/projections/decumulation";
-import {
-  projeterPatrimoineAnnuel,
-  projeterPatrimoineAnnuelParAnnee,
-} from "./engine/projections/net-worth";
+import { projeterAccumulationJusquaRetraite } from "./engine/projections/accumulation";
+import { simulerDecaissementDepuisAccumulation } from "./engine/projections/decumulation";
+import { calculerScoreEpargne } from "./engine/savings-score";
 import { calculerImpotFederal2025 } from "./engine/tax/federal";
 import { calculerCotisationsSociales2025 } from "./engine/tax/payroll";
 import { calculerImpotQuebec2025 } from "./engine/tax/quebec";
+import type {
+  ProfilUtilisateurMinimal,
+  ProvinceResidence,
+  StatutMarital,
+} from "./engine/types";
+
+const ANNEE_COURANTE = new Date().getFullYear();
+
+type OngletActif =
+  | "tableau-bord"
+  | "profil"
+  | "fiscalite"
+  | "accumulation"
+  | "decaissement"
+  | "hypotheque"
+  | "hypotheses";
+
+interface EtatProfil extends ProfilUtilisateurMinimal {
+  prenom: string;
+}
 
 interface EtatSaisie {
   revenuEmploi: number;
-  deductionREER: number;
   revenuGagneAnneePrecedente: number;
+  cotisationReerAnnuelle: number;
+  cotisationCeliAnnuelle: number;
+  cotisationNonEnregistreeAnnuelle: number;
+  depensesAnnuellesActuelles: number;
+  soldeReerInitial: number;
+  soldeCeliInitial: number;
+  soldeNonEnregistreInitial: number;
+  valeurImmobiliereInitiale: number;
+  capitalHypotheque: number;
+  tauxHypothecaire: number;
+  amortissementHypothecaire: number;
+  versementsParAnHypothecaire: number;
   anneeCouranteCELI: number;
   anneeNaissanceCELI: number;
   anneeArriveeCanadaCELI: number;
   droitsReportesCELI: number;
   retraitsAnneePrecedenteCELI: number;
   cotisationsCumulativesCELI: number;
-  valeurInitialeProjection: number;
-  contributionAnnuelleProjection: number;
-  rendementAnnuelProjection: number;
-  nombreAnneesProjection: number;
-  capitalHypotheque: number;
-  tauxHypothecaire: number;
-  amortissementHypothecaire: number;
-  versementsParAnHypothecaire: number;
-  capitalInitialDecaissement: number;
   retraitAnnuelInitialDecaissement: number;
   rendementAnnuelDecaissement: number;
   indexationRetraitDecaissement: number;
-  nombreAnneesDecaissement: number;
+  ageDebutRrq: number;
+  proportionCotisationRrq: number;
+  ageDebutPsv: number;
+  anneesResidenceCanadaApres18: number;
 }
+
+const profilInitial: EtatProfil = {
+  prenom: "",
+  ageActuel: 40,
+  anneeNaissance: ANNEE_COURANTE - 40,
+  ageRetraite: 60,
+  esperanceVie: 95,
+  provinceResidence: "QC",
+  statutMarital: "celibataire",
+};
 
 const etatInitial: EtatSaisie = {
   revenuEmploi: 100000,
-  deductionREER: 0,
   revenuGagneAnneePrecedente: 100000,
-  anneeCouranteCELI: 2026,
-  anneeNaissanceCELI: 1990,
+  cotisationReerAnnuelle: 12000,
+  cotisationCeliAnnuelle: 7000,
+  cotisationNonEnregistreeAnnuelle: 3000,
+  depensesAnnuellesActuelles: 42000,
+  soldeReerInitial: 150000,
+  soldeCeliInitial: 65000,
+  soldeNonEnregistreInitial: 25000,
+  valeurImmobiliereInitiale: 650000,
+  capitalHypotheque: 320000,
+  tauxHypothecaire: 5.25,
+  amortissementHypothecaire: 22,
+  versementsParAnHypothecaire: 12,
+  anneeCouranteCELI: ANNEE_COURANTE,
+  anneeNaissanceCELI: ANNEE_COURANTE - 40,
   anneeArriveeCanadaCELI: 2008,
   droitsReportesCELI: 0,
   retraitsAnneePrecedenteCELI: 0,
   cotisationsCumulativesCELI: 0,
-  valeurInitialeProjection: 250000,
-  contributionAnnuelleProjection: 18000,
-  rendementAnnuelProjection: hypothesesIqpf2026.rendementNominal.actionsCanadiennes * 100,
-  nombreAnneesProjection: 30,
-  capitalHypotheque: 500000,
-  tauxHypothecaire: 5.25,
-  amortissementHypothecaire: 25,
-  versementsParAnHypothecaire: 12,
-  capitalInitialDecaissement: 1200000,
   retraitAnnuelInitialDecaissement: 55000,
   rendementAnnuelDecaissement: 4.5,
   indexationRetraitDecaissement: 2,
-  nombreAnneesDecaissement: 35,
+  ageDebutRrq: 65,
+  proportionCotisationRrq: 100,
+  ageDebutPsv: 65,
+  anneesResidenceCanadaApres18: 40,
+};
+
+const OPTIONS_PROVINCE: ReadonlyArray<{
+  value: ProvinceResidence;
+  label: string;
+}> = [
+  { value: "QC", label: "Québec" },
+  { value: "AUTRE", label: "Autre province" },
+];
+
+const OPTIONS_STATUT_MARITAL: ReadonlyArray<{
+  value: StatutMarital;
+  label: string;
+}> = [
+  { value: "celibataire", label: "Célibataire" },
+  { value: "marie", label: "Marié" },
+  { value: "conjoint_de_fait", label: "Conjoint de fait" },
+  { value: "divorce", label: "Divorcé" },
+  { value: "veuf", label: "Veuf" },
+];
+
+const ONGLETS: ReadonlyArray<{ id: OngletActif; label: string }> = [
+  { id: "tableau-bord", label: "Tableau de bord" },
+  { id: "profil", label: "Profil" },
+  { id: "fiscalite", label: "Fiscalité" },
+  { id: "accumulation", label: "Accumulation" },
+  { id: "decaissement", label: "Décaissement" },
+  { id: "hypotheque", label: "Hypothèque" },
+  { id: "hypotheses", label: "Hypothèses" },
+];
+
+const IMPOT_NUL = {
+  revenuNet: 0,
+  revenuImposable: 0,
+  impotBrut: 0,
+  credits: 0,
+  impotNet: 0,
 };
 
 function formatMonetaire(valeur: number): string {
@@ -95,42 +170,8 @@ function formatPourcentage(valeur: number): string {
   return `${valeur.toFixed(2)} %`;
 }
 
-function calculerTexteCapaciteEpargne(revenuDisponible: number): string {
-  if (revenuDisponible <= 0) {
-    return "Avec ces valeurs, presque tout le revenu est deja absorbe. Il faudrait soit baisser certaines charges, soit revoir les hypotheses.";
-  }
-
-  if (revenuDisponible < 20000) {
-    return "Il reste un peu de marge apres impots et cotisations, mais le budget risque d'etre serre pour epargner beaucoup.";
-  }
-
-  if (revenuDisponible < 50000) {
-    return "Il reste une marge de manoeuvre interessante apres impots. Vous pouvez probablement epargner de facon reguliere.";
-  }
-
-  return "La marge restante est elevee. Ce scenario laisse beaucoup d'espace pour l'epargne, le remboursement de dettes ou l'investissement.";
-}
-
-function calculerTexteHypotheque(paiementParPeriode: number, versementsParAn: number): string {
-  const estimationMensuelle = (paiementParPeriode * versementsParAn) / 12;
-
-  if (estimationMensuelle < 1500) {
-    return "Le paiement estime semble relativement leger a l'echelle d'un budget familial moyen.";
-  }
-
-  if (estimationMensuelle < 3000) {
-    return "Le paiement estime est de taille moyenne. Il faut le comparer a votre revenu mensuel reel pour juger du confort.";
-  }
-
-  return "Le paiement estime est important. Pour un debutant, c'est un bon signal qu'il faut valider la capacite de payer mois apres mois.";
-}
-
-function calculerTexteDecaissement(capitalEpuise: boolean, anneeEpuisement: number | null): string {
-  if (capitalEpuise) {
-    return `Dans ce scenario, l'argent ne dure pas jusqu'a la fin de l'horizon choisi. L'epuisement arrive vers l'an ${anneeEpuisement}.`;
-  }
-
-  return "Dans ce scenario, le capital tient jusqu'a la fin de la periode choisie. Cela ne garantit pas que le plan soit optimal, mais le rythme de retrait semble soutenable.";
+function formatAnneeAge(annee: number, age: number): string {
+  return `${annee} (${age} ans)`;
 }
 
 function lireNombre(valeur: string, valeurParDefaut: number): number {
@@ -139,8 +180,79 @@ function lireNombre(valeur: string, valeurParDefaut: number): number {
   }
 
   const nombre = Number(valeur);
-
   return Number.isFinite(nombre) ? nombre : valeurParDefaut;
+}
+
+function validerProfil(profil: EtatProfil): string[] {
+  const messages: string[] = [];
+
+  if (profil.ageActuel < 18 || profil.ageActuel > 100) {
+    messages.push("L'âge actuel doit être entre 18 et 100 ans.");
+  }
+
+  if (profil.ageRetraite < 50 || profil.ageRetraite > 75) {
+    messages.push("L'âge visé pour la retraite doit être entre 50 et 75 ans.");
+  }
+
+  if (profil.ageRetraite <= profil.ageActuel) {
+    messages.push("L'âge de retraite doit être supérieur à l'âge actuel.");
+  }
+
+  if (profil.esperanceVie < profil.ageRetraite) {
+    messages.push("L'espérance de vie doit être au moins égale à l'âge de retraite.");
+  }
+
+  const anneeNaissanceAttendue = ANNEE_COURANTE - profil.ageActuel;
+
+  if (Math.abs(anneeNaissanceAttendue - profil.anneeNaissance) > 1) {
+    messages.push("L'année de naissance ne semble pas cohérente avec l'âge actuel.");
+  }
+
+  return messages;
+}
+
+function calculerTexteCapaciteEpargne(revenuDisponible: number): string {
+  if (revenuDisponible <= 0) {
+    return "Avec ces valeurs, presque tout le revenu est déjà absorbé. Il faudrait alléger les charges ou revoir le rythme d'épargne.";
+  }
+
+  if (revenuDisponible < 20000) {
+    return "Il reste un peu de marge après impôts et cotisations, mais le budget risque d'être serré.";
+  }
+
+  if (revenuDisponible < 50000) {
+    return "Il reste une marge de manœuvre intéressante après impôts. Vous pouvez probablement épargner régulièrement.";
+  }
+
+  return "La marge restante est élevée. Ce scénario laisse beaucoup d'espace pour l'épargne, le remboursement de dettes ou l'investissement.";
+}
+
+function calculerTexteHypotheque(
+  paiementParPeriode: number,
+  versementsParAn: number,
+): string {
+  const estimationMensuelle = (paiementParPeriode * versementsParAn) / 12;
+
+  if (estimationMensuelle < 1500) {
+    return "Le paiement estimé semble relativement léger à l'échelle d'un budget familial moyen.";
+  }
+
+  if (estimationMensuelle < 3000) {
+    return "Le paiement estimé est de taille moyenne. Il faut le comparer à votre revenu mensuel réel pour juger du confort.";
+  }
+
+  return "Le paiement estimé est important. C'est un bon signal qu'il faut valider la capacité de payer mois après mois.";
+}
+
+function calculerTexteDecaissement(
+  capitalEpuise: boolean,
+  anneeEpuisement: number | null,
+): string {
+  if (capitalEpuise) {
+    return `Dans ce scénario, l'argent ne dure pas jusqu'à la fin de l'horizon choisi. L'épuisement arrive vers ${anneeEpuisement}.`;
+  }
+
+  return "Dans ce scénario, le capital tient jusqu'à la fin de la période choisie. Le plan semble soutenable selon les hypothèses actuelles.";
 }
 
 interface ChampNombreProps {
@@ -184,6 +296,66 @@ function ChampNombre({
   );
 }
 
+interface ChampTexteProps {
+  etiquette: string;
+  valeur: string;
+  aide?: string;
+  onChange: (valeur: string) => void;
+}
+
+function ChampTexte({ etiquette, valeur, aide, onChange }: ChampTexteProps) {
+  return (
+    <label className="field">
+      <span className="field-label">{etiquette}</span>
+      <div className="input-shell">
+        <input
+          className="input"
+          type="text"
+          value={valeur}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </div>
+      {aide ? <span className="field-help">{aide}</span> : null}
+    </label>
+  );
+}
+
+interface ChampChoixProps<T extends string> {
+  etiquette: string;
+  valeur: T;
+  aide?: string;
+  options: ReadonlyArray<{ value: T; label: string }>;
+  onChange: (valeur: T) => void;
+}
+
+function ChampChoix<T extends string>({
+  etiquette,
+  valeur,
+  aide,
+  options,
+  onChange,
+}: ChampChoixProps<T>) {
+  return (
+    <label className="field">
+      <span className="field-label">{etiquette}</span>
+      <div className="input-shell">
+        <select
+          className="input input-select"
+          value={valeur}
+          onChange={(event) => onChange(event.target.value as T)}
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      {aide ? <span className="field-help">{aide}</span> : null}
+    </label>
+  );
+}
+
 interface CarteResultatProps {
   titre: string;
   valeur: string;
@@ -200,25 +372,15 @@ function CarteResultat({
   tonalite = "default",
 }: CarteResultatProps) {
   return (
-    <article className={`card result-card ${tonalite !== "default" ? `is-${tonalite}` : ""}`}>
+    <article
+      className={`card result-card ${
+        tonalite !== "default" ? `is-${tonalite}` : ""
+      }`}
+    >
       <h3>{titre}</h3>
       <p className="metric">{valeur}</p>
       <p>{description}</p>
       {detail ? <p className="result-detail">{detail}</p> : null}
-    </article>
-  );
-}
-
-interface TuileGuideProps {
-  titre: string;
-  texte: string;
-}
-
-function TuileGuide({ titre, texte }: TuileGuideProps) {
-  return (
-    <article className="card guide-card">
-      <h3>{titre}</h3>
-      <p>{texte}</p>
     </article>
   );
 }
@@ -229,7 +391,11 @@ interface CarteGraphiqueProps {
   children: ReactNode;
 }
 
-function CarteGraphique({ titre, description, children }: CarteGraphiqueProps) {
+function CarteGraphique({
+  titre,
+  description,
+  children,
+}: CarteGraphiqueProps) {
   return (
     <section className="card chart-card">
       <h3>{titre}</h3>
@@ -239,22 +405,45 @@ function CarteGraphique({ titre, description, children }: CarteGraphiqueProps) {
   );
 }
 
-interface CarteExplicationProps {
-  titre: string;
-  texte: string;
+interface TableauProps {
+  titres: string[];
+  lignes: ReactNode[][];
 }
 
-function CarteExplication({ titre, texte }: CarteExplicationProps) {
+function Tableau({ titres, lignes }: TableauProps) {
   return (
-    <article className="card explanation-card">
-      <h3>{titre}</h3>
-      <p>{texte}</p>
-    </article>
+    <div className="table-shell">
+      <table className="data-table">
+        <thead>
+          <tr>
+            {titres.map((titre) => (
+              <th key={titre}>{titre}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {lignes.map((ligne, index) => (
+            <tr key={`ligne-${index}`}>
+              {ligne.map((cellule, celluleIndex) => (
+                <td key={`cellule-${index}-${celluleIndex}`}>{cellule}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
 export default function App() {
+  const [profil, setProfil] = useState<EtatProfil>(profilInitial);
   const [etat, setEtat] = useState<EtatSaisie>(etatInitial);
+  const [ongletActif, setOngletActif] = useState<OngletActif>("tableau-bord");
+
+  const messagesProfil = useMemo(() => validerProfil(profil), [profil]);
+  const profilValide = messagesProfil.length === 0;
+  const prenomAffiche = profil.prenom.trim() || "vous";
+  const modeQuebec = profil.provinceResidence === "QC";
 
   const cotisations = useMemo(
     () =>
@@ -268,21 +457,23 @@ export default function App() {
     () =>
       calculerImpotFederal2025({
         revenuEmploi: etat.revenuEmploi,
-        deductionREER: etat.deductionREER,
-        resideAuQuebec: true,
+        deductionREER: etat.cotisationReerAnnuelle,
+        resideAuQuebec: modeQuebec,
         cotisationsSociales: cotisations,
       }),
-    [cotisations, etat.deductionREER, etat.revenuEmploi],
+    [cotisations, etat.cotisationReerAnnuelle, etat.revenuEmploi, modeQuebec],
   );
 
   const impotQuebec = useMemo(
     () =>
-      calculerImpotQuebec2025({
-        revenuEmploi: etat.revenuEmploi,
-        deductionREER: etat.deductionREER,
-        cotisationsSociales: cotisations,
-      }),
-    [cotisations, etat.deductionREER, etat.revenuEmploi],
+      modeQuebec
+        ? calculerImpotQuebec2025({
+            revenuEmploi: etat.revenuEmploi,
+            deductionREER: etat.cotisationReerAnnuelle,
+            cotisationsSociales: cotisations,
+          })
+        : IMPOT_NUL,
+    [cotisations, etat.cotisationReerAnnuelle, etat.revenuEmploi, modeQuebec],
   );
 
   const droitsREER = useMemo(
@@ -329,99 +520,197 @@ export default function App() {
     ],
   );
 
-  const projectionParAnnee = useMemo(
+  const scoreEpargne = useMemo(
     () =>
-      projeterPatrimoineAnnuelParAnnee({
-        valeurInitiale: etat.valeurInitialeProjection,
-        contributionAnnuelle: etat.contributionAnnuelleProjection,
-        rendementAnnuel: etat.rendementAnnuelProjection / 100,
-        nombreAnnees: etat.nombreAnneesProjection,
+      calculerScoreEpargne({
+        revenuBrutAnnuel: etat.revenuEmploi,
+        cotisationReer: etat.cotisationReerAnnuelle,
+        cotisationCeli: etat.cotisationCeliAnnuelle,
+        epargneNonEnregistree: etat.cotisationNonEnregistreeAnnuelle,
       }),
     [
-      etat.contributionAnnuelleProjection,
-      etat.nombreAnneesProjection,
-      etat.rendementAnnuelProjection,
-      etat.valeurInitialeProjection,
+      etat.cotisationCeliAnnuelle,
+      etat.cotisationNonEnregistreeAnnuelle,
+      etat.cotisationReerAnnuelle,
+      etat.revenuEmploi,
     ],
   );
 
-  const projection = useMemo(
+  const accumulation = useMemo(
     () =>
-      projeterPatrimoineAnnuel({
-        valeurInitiale: etat.valeurInitialeProjection,
-        contributionAnnuelle: etat.contributionAnnuelleProjection,
-        rendementAnnuel: etat.rendementAnnuelProjection / 100,
-        nombreAnnees: etat.nombreAnneesProjection,
-      }),
-    [
-      etat.contributionAnnuelleProjection,
-      etat.nombreAnneesProjection,
-      etat.rendementAnnuelProjection,
-      etat.valeurInitialeProjection,
-    ],
+      profilValide
+        ? projeterAccumulationJusquaRetraite({
+            profil,
+            anneeCourante: ANNEE_COURANTE,
+            revenuEmploiActuel: etat.revenuEmploi,
+            depensesAnnuellesActuelles: etat.depensesAnnuellesActuelles,
+            cotisationReerAnnuelle: etat.cotisationReerAnnuelle,
+            cotisationCeliAnnuelle: etat.cotisationCeliAnnuelle,
+            cotisationNonEnregistreeAnnuelle:
+              etat.cotisationNonEnregistreeAnnuelle,
+            soldeReerInitial: etat.soldeReerInitial,
+            soldeCeliInitial: etat.soldeCeliInitial,
+            soldeNonEnregistreInitial: etat.soldeNonEnregistreInitial,
+            valeurImmobiliereInitiale: etat.valeurImmobiliereInitiale,
+            soldeHypothecaireInitial: etat.capitalHypotheque,
+            tauxHypothecaire: etat.tauxHypothecaire / 100,
+            amortissementHypothecaireAnnees: etat.amortissementHypothecaire,
+            versementsHypothecairesParAn: etat.versementsParAnHypothecaire,
+            croissanceSalaire: hypothesesIqpf.croissanceSalaires,
+            inflation: hypothesesIqpf.inflation,
+            rendementReer: hypothesesIqpf.rendementNominal.actionsCanadiennes,
+            rendementCeli: hypothesesIqpf.rendementNominal.actionsCanadiennes,
+            rendementNonEnregistre:
+              hypothesesIqpf.rendementNominal.actionsCanadiennes,
+            croissanceImmobiliere: hypothesesIqpf.immobilier.residencePrincipale,
+          })
+        : null,
+    [etat, profil, profilValide],
+  );
+
+  const nombreAnneesDecaissement = Math.max(
+    1,
+    profil.esperanceVie - profil.ageRetraite,
   );
 
   const simulationDecaissement = useMemo(
     () =>
-      simulerDecaissementAnnuel({
-        capitalInitial: etat.capitalInitialDecaissement,
-        retraitAnnuelInitial: etat.retraitAnnuelInitialDecaissement,
-        rendementAnnuel: etat.rendementAnnuelDecaissement / 100,
-        indexationRetrait: etat.indexationRetraitDecaissement / 100,
-        nombreAnnees: etat.nombreAnneesDecaissement,
-      }),
+      accumulation
+        ? simulerDecaissementDepuisAccumulation(accumulation, {
+            retraitAnnuelCibleInitial: etat.retraitAnnuelInitialDecaissement,
+            rendementReer: etat.rendementAnnuelDecaissement / 100,
+            rendementCeli: etat.rendementAnnuelDecaissement / 100,
+            rendementNonEnregistre: etat.rendementAnnuelDecaissement / 100,
+            indexationRetrait: etat.indexationRetraitDecaissement / 100,
+            nombreAnnees: nombreAnneesDecaissement,
+            ageDebutRrq: etat.ageDebutRrq,
+            proportionCotisationRrq: etat.proportionCotisationRrq / 100,
+            ageDebutPsv: etat.ageDebutPsv,
+            anneesResidenceCanadaApres18:
+              etat.anneesResidenceCanadaApres18,
+          })
+        : null,
     [
-      etat.capitalInitialDecaissement,
+      accumulation,
+      etat.ageDebutPsv,
+      etat.ageDebutRrq,
+      etat.anneesResidenceCanadaApres18,
       etat.indexationRetraitDecaissement,
-      etat.nombreAnneesDecaissement,
+      etat.proportionCotisationRrq,
       etat.rendementAnnuelDecaissement,
       etat.retraitAnnuelInitialDecaissement,
+      nombreAnneesDecaissement,
     ],
   );
 
   const totalImpot = impotFederal.impotNet + impotQuebec.impotNet;
   const revenuApresImpotEtCotisations =
     etat.revenuEmploi - totalImpot - cotisations.totalPersonnel;
-  const tauxPrelevementGlobal =
-    etat.revenuEmploi > 0
-      ? ((totalImpot + cotisations.totalPersonnel) / etat.revenuEmploi) * 100
-      : 0;
-  const gainProjete =
-    projection -
-    etat.valeurInitialeProjection -
-    etat.contributionAnnuelleProjection * etat.nombreAnneesProjection;
   const equivalentMensuelHypotheque =
     (paiementHypothecaire * etat.versementsParAnHypothecaire) / 12;
 
   const donneesVentilationFiscale = useMemo(
     () => [
-      { nom: "Federal", montant: impotFederal.impotNet },
-      { nom: "Quebec", montant: impotQuebec.impotNet },
+      { nom: "Fédéral", montant: impotFederal.impotNet },
+      { nom: modeQuebec ? "Québec" : "Province", montant: impotQuebec.impotNet },
       { nom: "Cotisations", montant: cotisations.totalPersonnel },
-      { nom: "Net disponible", montant: Math.max(0, revenuApresImpotEtCotisations) },
+      {
+        nom: "Net disponible",
+        montant: Math.max(0, revenuApresImpotEtCotisations),
+      },
     ],
-    [cotisations.totalPersonnel, impotFederal.impotNet, impotQuebec.impotNet, revenuApresImpotEtCotisations],
+    [
+      cotisations.totalPersonnel,
+      impotFederal.impotNet,
+      impotQuebec.impotNet,
+      modeQuebec,
+      revenuApresImpotEtCotisations,
+    ],
   );
 
-  const donneesProjection = useMemo(
+  const donneesAccumulation = useMemo(
     () =>
-      projectionParAnnee.map((point) => ({
-        annee: `An ${point.anneeIndex}`,
-        valeurFin: point.valeurFin,
-        croissance: point.croissance,
-        contribution: point.contribution,
-      })),
-    [projectionParAnnee],
+      accumulation?.points.map((point) => ({
+        etiquette: formatAnneeAge(point.annee, point.age),
+        valeurNetteTotale: point.valeurNetteTotaleFin,
+        reer: point.soldeReerFin,
+        celi: point.soldeCeliFin,
+        nonEnregistre: point.soldeNonEnregistreFin,
+      })) ?? [],
+    [accumulation],
   );
 
   const donneesDecaissement = useMemo(
     () =>
-      simulationDecaissement.points.map((point) => ({
-        annee: `An ${point.anneeIndex}`,
-        capitalFin: point.valeurFin,
-        retrait: point.retraitAnnuel,
-      })),
-    [simulationDecaissement.points],
+      simulationDecaissement?.points.map((point) => ({
+        etiquette: formatAnneeAge(point.annee, point.age),
+        capitalRestant:
+          point.soldeReerFin + point.soldeCeliFin + point.soldeNonEnregistreFin,
+        retrait: point.retraitTotalBrut,
+        net: point.netDisponible,
+      })) ?? [],
+    [simulationDecaissement],
+  );
+
+  const lignesFiscalite = useMemo<ReactNode[][]>(
+    () => [
+      ["Salaire brut", formatMonetaire(etat.revenuEmploi)],
+      ["Cotisations sociales", formatMonetaire(cotisations.totalPersonnel)],
+      ["Impôt fédéral", formatMonetaire(impotFederal.impotNet)],
+      [
+        modeQuebec ? "Impôt Québec" : "Impôt provincial affiché",
+        formatMonetaire(impotQuebec.impotNet),
+      ],
+      ["Revenu net après prélèvements", formatMonetaire(revenuApresImpotEtCotisations)],
+      ["Nouveaux droits REER", formatMonetaire(droitsREER)],
+      ["Espace CELI disponible", formatMonetaire(droitsCELI)],
+    ],
+    [
+      cotisations.totalPersonnel,
+      droitsCELI,
+      droitsREER,
+      etat.revenuEmploi,
+      impotFederal.impotNet,
+      impotQuebec.impotNet,
+      modeQuebec,
+      revenuApresImpotEtCotisations,
+    ],
+  );
+
+  const lignesAccumulation = useMemo<ReactNode[][]>(
+    () =>
+      accumulation?.points.map((point) => [
+        point.annee,
+        point.age,
+        formatMonetaire(point.revenuEmploi),
+        formatMonetaire(point.epargneTotale),
+        formatMonetaire(point.serviceHypothecaireAnnuel),
+        formatMonetaire(point.soldeReerFin),
+        formatMonetaire(point.soldeCeliFin),
+        formatMonetaire(point.soldeNonEnregistreFin),
+        formatMonetaire(point.valeurNetteTotaleFin),
+      ]) ?? [],
+    [accumulation],
+  );
+
+  const lignesDecaissement = useMemo<ReactNode[][]>(
+    () =>
+      simulationDecaissement?.points.map((point) => [
+        point.annee,
+        point.age,
+        formatMonetaire(point.rrq),
+        formatMonetaire(point.psv),
+        formatMonetaire(point.retraitReer),
+        formatMonetaire(point.retraitCeli),
+        formatMonetaire(point.retraitNonEnregistre),
+        formatMonetaire(point.impotTotal),
+        formatMonetaire(point.netDisponible),
+        formatMonetaire(point.soldeReerFin),
+        formatMonetaire(point.soldeCeliFin),
+        formatMonetaire(point.soldeNonEnregistreFin),
+        formatMonetaire(point.recuperationPsv),
+      ]) ?? [],
+    [simulationDecaissement],
   );
 
   function mettreAJour<K extends keyof EtatSaisie>(cle: K, valeur: EtatSaisie[K]) {
@@ -431,483 +720,863 @@ export default function App() {
     }));
   }
 
+  function mettreAJourProfil<K extends keyof EtatProfil>(
+    cle: K,
+    valeur: EtatProfil[K],
+  ) {
+    setProfil((profilCourant) => ({
+      ...profilCourant,
+      [cle]: valeur,
+    }));
+  }
+
+  function reinitialiser() {
+    setProfil(profilInitial);
+    setEtat(etatInitial);
+    setOngletActif("tableau-bord");
+  }
+
+  function renduVerrouillage() {
+    return (
+      <div className="stack">
+        <section className="panel locked-card">
+          <h2 className="section-title">Commencez par votre profil</h2>
+          <p className="section-copy">
+            L'outil demande d'abord votre âge actuel, votre année de naissance,
+            votre âge visé pour la retraite et votre espérance de vie. Sans ce
+            minimum, les projections ne sont pas fiables.
+          </p>
+          {messagesProfil.length > 0 ? (
+            <ul>
+              {messagesProfil.map((message) => (
+                <li key={message}>{message}</li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      </div>
+    );
+  }
+
+  function renduProfil() {
+    return (
+      <div className="stack">
+        <section className="panel">
+          <h2 className="section-title">Profil de départ</h2>
+          <p className="section-copy">
+            Cette section sert à installer le bon repère calendrier. Toutes les
+            projections seront ensuite exprimées avec une année réelle et votre
+            âge correspondant.
+          </p>
+          <div className="field-grid">
+            <ChampTexte
+              etiquette="Prénom"
+              valeur={profil.prenom}
+              aide="Optionnel. Sert seulement à personnaliser l'accueil."
+              onChange={(valeur) => mettreAJourProfil("prenom", valeur)}
+            />
+            <ChampNombre
+              etiquette="Âge actuel"
+              valeur={profil.ageActuel}
+              min={18}
+              max={100}
+              suffixe="ans"
+              onChange={(valeur) => {
+                mettreAJourProfil("ageActuel", valeur);
+                mettreAJourProfil("anneeNaissance", ANNEE_COURANTE - valeur);
+              }}
+            />
+            <ChampNombre
+              etiquette="Année de naissance"
+              valeur={profil.anneeNaissance}
+              min={1900}
+              max={2100}
+              onChange={(valeur) => mettreAJourProfil("anneeNaissance", valeur)}
+            />
+            <ChampNombre
+              etiquette="Âge visé pour la retraite"
+              valeur={profil.ageRetraite}
+              min={50}
+              max={75}
+              suffixe="ans"
+              onChange={(valeur) => mettreAJourProfil("ageRetraite", valeur)}
+            />
+            <ChampNombre
+              etiquette="Espérance de vie"
+              valeur={profil.esperanceVie}
+              min={profil.ageRetraite}
+              max={110}
+              suffixe="ans"
+              onChange={(valeur) => mettreAJourProfil("esperanceVie", valeur)}
+            />
+            <ChampChoix
+              etiquette="Province de résidence"
+              valeur={profil.provinceResidence}
+              options={OPTIONS_PROVINCE}
+              aide="Le moteur détaillé actuel est prioritairement calibré pour le Québec."
+              onChange={(valeur) => mettreAJourProfil("provinceResidence", valeur)}
+            />
+            <ChampChoix
+              etiquette="Statut marital"
+              valeur={profil.statutMarital}
+              options={OPTIONS_STATUT_MARITAL}
+              onChange={(valeur) => mettreAJourProfil("statutMarital", valeur)}
+            />
+          </div>
+        </section>
+
+        <section className="panel">
+          <h2 className="section-title">Revenus, épargne et patrimoine</h2>
+          <div className="field-grid">
+            <ChampNombre
+              etiquette="Salaire brut annuel"
+              valeur={etat.revenuEmploi}
+              pas={100}
+              min={0}
+              suffixe="$"
+              onChange={(valeur) => mettreAJour("revenuEmploi", valeur)}
+            />
+            <ChampNombre
+              etiquette="Salaire gagné l'an dernier"
+              valeur={etat.revenuGagneAnneePrecedente}
+              pas={100}
+              min={0}
+              suffixe="$"
+              aide="Il sert surtout à estimer les nouveaux droits REER."
+              onChange={(valeur) =>
+                mettreAJour("revenuGagneAnneePrecedente", valeur)
+              }
+            />
+            <ChampNombre
+              etiquette="Cotisation REER annuelle"
+              valeur={etat.cotisationReerAnnuelle}
+              pas={100}
+              min={0}
+              suffixe="$"
+              onChange={(valeur) => mettreAJour("cotisationReerAnnuelle", valeur)}
+            />
+            <ChampNombre
+              etiquette="Cotisation CELI annuelle"
+              valeur={etat.cotisationCeliAnnuelle}
+              pas={100}
+              min={0}
+              suffixe="$"
+              onChange={(valeur) => mettreAJour("cotisationCeliAnnuelle", valeur)}
+            />
+            <ChampNombre
+              etiquette="Épargne non enregistrée annuelle"
+              valeur={etat.cotisationNonEnregistreeAnnuelle}
+              pas={100}
+              min={0}
+              suffixe="$"
+              onChange={(valeur) =>
+                mettreAJour("cotisationNonEnregistreeAnnuelle", valeur)
+              }
+            />
+            <ChampNombre
+              etiquette="Dépenses annuelles actuelles"
+              valeur={etat.depensesAnnuellesActuelles}
+              pas={100}
+              min={0}
+              suffixe="$"
+              onChange={(valeur) =>
+                mettreAJour("depensesAnnuellesActuelles", valeur)
+              }
+            />
+            <ChampNombre
+              etiquette="Solde REER actuel"
+              valeur={etat.soldeReerInitial}
+              pas={1000}
+              min={0}
+              suffixe="$"
+              onChange={(valeur) => mettreAJour("soldeReerInitial", valeur)}
+            />
+            <ChampNombre
+              etiquette="Solde CELI actuel"
+              valeur={etat.soldeCeliInitial}
+              pas={1000}
+              min={0}
+              suffixe="$"
+              onChange={(valeur) => mettreAJour("soldeCeliInitial", valeur)}
+            />
+            <ChampNombre
+              etiquette="Solde non enregistré actuel"
+              valeur={etat.soldeNonEnregistreInitial}
+              pas={1000}
+              min={0}
+              suffixe="$"
+              onChange={(valeur) =>
+                mettreAJour("soldeNonEnregistreInitial", valeur)
+              }
+            />
+            <ChampNombre
+              etiquette="Valeur marchande de la propriété"
+              valeur={etat.valeurImmobiliereInitiale}
+              pas={1000}
+              min={0}
+              suffixe="$"
+              onChange={(valeur) =>
+                mettreAJour("valeurImmobiliereInitiale", valeur)
+              }
+            />
+          </div>
+        </section>
+
+        <section className="panel">
+          <h2 className="section-title">Paramètres CELI</h2>
+          <div className="field-grid">
+            <ChampNombre
+              etiquette="Année courante du calcul"
+              valeur={etat.anneeCouranteCELI}
+              min={2009}
+              max={2100}
+              onChange={(valeur) => mettreAJour("anneeCouranteCELI", valeur)}
+            />
+            <ChampNombre
+              etiquette="Année de naissance pour le CELI"
+              valeur={etat.anneeNaissanceCELI}
+              min={1900}
+              max={2100}
+              onChange={(valeur) => mettreAJour("anneeNaissanceCELI", valeur)}
+            />
+            <ChampNombre
+              etiquette="Année d'arrivée au Canada"
+              valeur={etat.anneeArriveeCanadaCELI}
+              min={1900}
+              max={2100}
+              onChange={(valeur) =>
+                mettreAJour("anneeArriveeCanadaCELI", valeur)
+              }
+            />
+            <ChampNombre
+              etiquette="Droits reportés CELI"
+              valeur={etat.droitsReportesCELI}
+              pas={100}
+              min={0}
+              suffixe="$"
+              onChange={(valeur) => mettreAJour("droitsReportesCELI", valeur)}
+            />
+            <ChampNombre
+              etiquette="Retraits CELI l'an dernier"
+              valeur={etat.retraitsAnneePrecedenteCELI}
+              pas={100}
+              min={0}
+              suffixe="$"
+              onChange={(valeur) =>
+                mettreAJour("retraitsAnneePrecedenteCELI", valeur)
+              }
+            />
+            <ChampNombre
+              etiquette="Cotisations cumulatives CELI"
+              valeur={etat.cotisationsCumulativesCELI}
+              pas={100}
+              min={0}
+              suffixe="$"
+              onChange={(valeur) =>
+                mettreAJour("cotisationsCumulativesCELI", valeur)
+              }
+            />
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  function renduTableauBord() {
+    if (!profilValide || !accumulation || !simulationDecaissement) {
+      return renduVerrouillage();
+    }
+
+    return (
+      <div className="stack">
+        {!modeQuebec ? (
+          <section className="panel locked-card">
+            <p className="section-copy">
+              La structure de l'outil accepte une autre province, mais le moteur
+              détaillé actuel reste surtout validé pour le Québec. Utilisez ce
+              résultat comme un aperçu seulement.
+            </p>
+          </section>
+        ) : null}
+
+        <div className="card-grid result-grid">
+          <CarteResultat
+            titre="Score d'épargne"
+            valeur={`${scoreEpargne.score} / 5`}
+            description={`${scoreEpargne.libelle} — ${scoreEpargne.plageTauxEpargne}`}
+            detail={scoreEpargne.commentaireConseiller}
+            tonalite={
+              scoreEpargne.score >= 4
+                ? "success"
+                : scoreEpargne.score <= 2
+                  ? "alert"
+                  : "default"
+            }
+          />
+          <CarteResultat
+            titre="Revenu net après prélèvements"
+            valeur={formatMonetaire(revenuApresImpotEtCotisations)}
+            description="Ce qu'il reste aujourd'hui après impôts et cotisations."
+            detail={calculerTexteCapaciteEpargne(revenuApresImpotEtCotisations)}
+          />
+          <CarteResultat
+            titre="Début de retraite"
+            valeur={formatMonetaire(accumulation.valeurNetteTotaleRetraite)}
+            description={`Au 1er janvier ${accumulation.anneeRetraite}, à ${accumulation.ageRetraite} ans.`}
+            detail={`REER ${formatMonetaire(accumulation.capitalReerRetraite)} | CELI ${formatMonetaire(accumulation.capitalCeliRetraite)} | Non enregistré ${formatMonetaire(accumulation.capitalNonEnregistreRetraite)}`}
+          />
+          <CarteResultat
+            titre="Fin de retraite projetée"
+            valeur={formatMonetaire(simulationDecaissement.capitalFinalTotal)}
+            description="Capital estimé à la fin de l'horizon de retraite."
+            detail={calculerTexteDecaissement(
+              simulationDecaissement.capitalEpuise,
+              simulationDecaissement.anneeEpuisement,
+            )}
+            tonalite={
+              simulationDecaissement.capitalEpuise ? "alert" : "success"
+            }
+          />
+        </div>
+
+        <div className="chart-grid">
+          <CarteGraphique
+            titre="Fiscalité actuelle"
+            description="Vue simple de ce qui part en impôts, en cotisations et de ce qu'il reste."
+          >
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={donneesVentilationFiscale}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="rgba(82, 64, 43, 0.12)"
+                />
+                <XAxis dataKey="nom" tick={{ fill: "#675b4f", fontSize: 12 }} />
+                <YAxis
+                  tickFormatter={formatCompact}
+                  tick={{ fill: "#675b4f", fontSize: 12 }}
+                />
+                <Tooltip
+                  formatter={(valeur: number | string) =>
+                    formatMonetaire(Number(valeur))
+                  }
+                />
+                <Bar dataKey="montant" fill="#0f766e" radius={[8, 8, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CarteGraphique>
+
+          <CarteGraphique
+            titre="Accumulation jusqu'à la retraite"
+            description="La ligne principale montre la valeur nette totale projetée d'année en année."
+          >
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={donneesAccumulation}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="rgba(82, 64, 43, 0.12)"
+                />
+                <XAxis
+                  dataKey="etiquette"
+                  tick={{ fill: "#675b4f", fontSize: 12 }}
+                  minTickGap={28}
+                />
+                <YAxis
+                  tickFormatter={formatCompact}
+                  tick={{ fill: "#675b4f", fontSize: 12 }}
+                />
+                <Tooltip
+                  formatter={(valeur: number | string) =>
+                    formatMonetaire(Number(valeur))
+                  }
+                />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="valeurNetteTotale"
+                  stroke="#0f766e"
+                  strokeWidth={3}
+                  dot={false}
+                  name="Valeur nette totale"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="reer"
+                  stroke="#b45309"
+                  strokeWidth={2}
+                  dot={false}
+                  name="REER"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="celi"
+                  stroke="#2f855a"
+                  strokeWidth={2}
+                  dot={false}
+                  name="CELI"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </CarteGraphique>
+
+          <CarteGraphique
+            titre="Décaissement à la retraite"
+            description="Capital restant, retraits bruts et net disponible, année par année."
+          >
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={donneesDecaissement}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="rgba(82, 64, 43, 0.12)"
+                />
+                <XAxis
+                  dataKey="etiquette"
+                  tick={{ fill: "#675b4f", fontSize: 12 }}
+                  minTickGap={28}
+                />
+                <YAxis
+                  tickFormatter={formatCompact}
+                  tick={{ fill: "#675b4f", fontSize: 12 }}
+                />
+                <Tooltip
+                  formatter={(valeur: number | string) =>
+                    formatMonetaire(Number(valeur))
+                  }
+                />
+                <Legend />
+                <Area
+                  type="monotone"
+                  dataKey="capitalRestant"
+                  stroke="#0f766e"
+                  fill="rgba(15, 118, 110, 0.24)"
+                  name="Capital restant"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="retrait"
+                  stroke="#b45309"
+                  strokeWidth={2}
+                  dot={false}
+                  name="Retrait brut"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="net"
+                  stroke="#2f855a"
+                  strokeWidth={2}
+                  dot={false}
+                  name="Net disponible"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </CarteGraphique>
+        </div>
+      </div>
+    );
+  }
+
+  function renduFiscalite() {
+    if (!profilValide) {
+      return renduVerrouillage();
+    }
+
+    return (
+      <div className="stack">
+        <div className="card-grid result-grid">
+          <CarteResultat
+            titre="Impôt fédéral"
+            valeur={formatMonetaire(impotFederal.impotNet)}
+            description="Estimation simple pour l'année courante."
+          />
+          <CarteResultat
+            titre={modeQuebec ? "Impôt Québec" : "Impôt provincial affiché"}
+            valeur={formatMonetaire(impotQuebec.impotNet)}
+            description={
+              modeQuebec
+                ? "Estimation simple pour l'année courante."
+                : "Le moteur provincial détaillé n'est pas encore décliné hors Québec."
+            }
+          />
+          <CarteResultat
+            titre="Droits REER estimés"
+            valeur={formatMonetaire(droitsREER)}
+            description="Espace REER généré par le salaire de l'an dernier."
+          />
+          <CarteResultat
+            titre="Espace CELI disponible"
+            valeur={formatMonetaire(droitsCELI)}
+            description="Espace encore disponible selon les données saisies."
+          />
+        </div>
+        <section className="panel">
+          <h2 className="section-title">Décomposition actuelle</h2>
+          <Tableau titres={["Poste", "Montant"]} lignes={lignesFiscalite} />
+        </section>
+      </div>
+    );
+  }
+
+  function renduAccumulation() {
+    if (!profilValide || !accumulation) {
+      return renduVerrouillage();
+    }
+
+    return (
+      <div className="stack">
+        <div className="card-grid result-grid">
+          <CarteResultat
+            titre="REER à la retraite"
+            valeur={formatMonetaire(accumulation.capitalReerRetraite)}
+            description={`Au 1er janvier ${accumulation.anneeRetraite}, à ${accumulation.ageRetraite} ans.`}
+          />
+          <CarteResultat
+            titre="CELI à la retraite"
+            valeur={formatMonetaire(accumulation.capitalCeliRetraite)}
+            description="Capital projeté dans le CELI au début de la retraite."
+          />
+          <CarteResultat
+            titre="Non enregistré à la retraite"
+            valeur={formatMonetaire(accumulation.capitalNonEnregistreRetraite)}
+            description="Capital projeté hors comptes enregistrés."
+          />
+          <CarteResultat
+            titre="Valeur nette immobilière"
+            valeur={formatMonetaire(accumulation.valeurNetteImmobiliereRetraite)}
+            description={calculerTexteHypotheque(
+              paiementHypothecaire,
+              etat.versementsParAnHypothecaire,
+            )}
+          />
+        </div>
+
+        <section className="panel">
+          <h2 className="section-title">Projection année par année</h2>
+          <Tableau
+            titres={[
+              "Année",
+              "Âge",
+              "Salaire",
+              "Épargne",
+              "Service hypothécaire",
+              "REER",
+              "CELI",
+              "Non enr.",
+              "Valeur nette totale",
+            ]}
+            lignes={lignesAccumulation}
+          />
+        </section>
+      </div>
+    );
+  }
+
+  function renduDecaissement() {
+    if (!profilValide || !simulationDecaissement || !accumulation) {
+      return renduVerrouillage();
+    }
+
+    return (
+      <div className="stack">
+        <section className="panel">
+          <h2 className="section-title">Paramètres de retraite</h2>
+          <p className="section-copy">
+            Le capital de départ n'est pas saisi à la main. Il est repris
+            automatiquement de la fin de l'accumulation au 1er janvier
+            {` ${accumulation.anneeRetraite}`}, à {accumulation.ageRetraite} ans.
+          </p>
+          <div className="field-grid">
+            <ChampNombre
+              etiquette="Retrait visé la première année"
+              valeur={etat.retraitAnnuelInitialDecaissement}
+              pas={100}
+              min={0}
+              suffixe="$"
+              onChange={(valeur) =>
+                mettreAJour("retraitAnnuelInitialDecaissement", valeur)
+              }
+            />
+            <ChampNombre
+              etiquette="Rendement annuel en retraite"
+              valeur={etat.rendementAnnuelDecaissement}
+              pas={0.1}
+              suffixe="%"
+              onChange={(valeur) =>
+                mettreAJour("rendementAnnuelDecaissement", valeur)
+              }
+            />
+            <ChampNombre
+              etiquette="Hausse annuelle des retraits"
+              valeur={etat.indexationRetraitDecaissement}
+              pas={0.1}
+              suffixe="%"
+              onChange={(valeur) =>
+                mettreAJour("indexationRetraitDecaissement", valeur)
+              }
+            />
+            <ChampNombre
+              etiquette="Âge de début RRQ"
+              valeur={etat.ageDebutRrq}
+              min={60}
+              max={72}
+              suffixe="ans"
+              onChange={(valeur) => mettreAJour("ageDebutRrq", valeur)}
+            />
+            <ChampNombre
+              etiquette="Proportion de rente RRQ retenue"
+              valeur={etat.proportionCotisationRrq}
+              min={0}
+              max={100}
+              suffixe="%"
+              aide="100 % = rente maximale simplifiée."
+              onChange={(valeur) =>
+                mettreAJour("proportionCotisationRrq", valeur)
+              }
+            />
+            <ChampNombre
+              etiquette="Âge de début PSV"
+              valeur={etat.ageDebutPsv}
+              min={65}
+              max={70}
+              suffixe="ans"
+              onChange={(valeur) => mettreAJour("ageDebutPsv", valeur)}
+            />
+            <ChampNombre
+              etiquette="Années de résidence au Canada après 18 ans"
+              valeur={etat.anneesResidenceCanadaApres18}
+              min={0}
+              max={40}
+              suffixe="ans"
+              onChange={(valeur) =>
+                mettreAJour("anneesResidenceCanadaApres18", valeur)
+              }
+            />
+            <CarteResultat
+              titre="Horizon de retraite"
+              valeur={`${nombreAnneesDecaissement} ans`}
+              description="Il est dérivé de l'âge de retraite et de l'espérance de vie."
+              detail={`${profil.ageRetraite} à ${profil.esperanceVie} ans`}
+            />
+          </div>
+        </section>
+
+        <div className="card-grid result-grid">
+          <CarteResultat
+            titre="Capital de départ calculé"
+            valeur={formatMonetaire(simulationDecaissement.capitalInitialTotal)}
+            description={`Démarrage automatique en ${accumulation.anneeRetraite} à ${accumulation.ageRetraite} ans.`}
+          />
+          <CarteResultat
+            titre="Capital final projeté"
+            valeur={formatMonetaire(simulationDecaissement.capitalFinalTotal)}
+            description={calculerTexteDecaissement(
+              simulationDecaissement.capitalEpuise,
+              simulationDecaissement.anneeEpuisement,
+            )}
+            tonalite={
+              simulationDecaissement.capitalEpuise ? "alert" : "success"
+            }
+          />
+        </div>
+
+        <section className="panel">
+          <h2 className="section-title">Tableau de décaissement</h2>
+          <Tableau
+            titres={[
+              "Année",
+              "Âge",
+              "RRQ",
+              "PSV",
+              "Retrait REER",
+              "Retrait CELI",
+              "Retrait non enr.",
+              "Impôt total",
+              "Net disponible",
+              "Solde REER",
+              "Solde CELI",
+              "Solde non enr.",
+              "Récupération PSV",
+            ]}
+            lignes={lignesDecaissement}
+          />
+        </section>
+      </div>
+    );
+  }
+
+  function renduHypotheque() {
+    if (!profilValide) {
+      return renduVerrouillage();
+    }
+
+    return (
+      <div className="stack">
+        <section className="panel">
+          <h2 className="section-title">Hypothèque</h2>
+          <p className="section-copy">
+            Le calcul utilise la norme canadienne à capitalisation semi-annuelle.
+          </p>
+          <div className="field-grid">
+            <ChampNombre
+              etiquette="Solde hypothécaire"
+              valeur={etat.capitalHypotheque}
+              pas={1000}
+              min={0}
+              suffixe="$"
+              onChange={(valeur) => mettreAJour("capitalHypotheque", valeur)}
+            />
+            <ChampNombre
+              etiquette="Taux contractuel"
+              valeur={etat.tauxHypothecaire}
+              pas={0.01}
+              min={0}
+              suffixe="%"
+              onChange={(valeur) => mettreAJour("tauxHypothecaire", valeur)}
+            />
+            <ChampNombre
+              etiquette="Amortissement résiduel"
+              valeur={etat.amortissementHypothecaire}
+              pas={1}
+              min={1}
+              suffixe="ans"
+              onChange={(valeur) =>
+                mettreAJour("amortissementHypothecaire", valeur)
+              }
+            />
+            <ChampNombre
+              etiquette="Versements par an"
+              valeur={etat.versementsParAnHypothecaire}
+              pas={1}
+              min={1}
+              onChange={(valeur) =>
+                mettreAJour("versementsParAnHypothecaire", valeur)
+              }
+            />
+          </div>
+        </section>
+        <div className="card-grid result-grid">
+          <CarteResultat
+            titre="Paiement par versement"
+            valeur={formatMonetaire(paiementHypothecaire)}
+            description="Calcul canadien à capitalisation semi-annuelle."
+          />
+          <CarteResultat
+            titre="Équivalent mensuel"
+            valeur={formatMonetaire(equivalentMensuelHypotheque)}
+            description={calculerTexteHypotheque(
+              paiementHypothecaire,
+              etat.versementsParAnHypothecaire,
+            )}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  function renduHypotheses() {
+    return (
+      <div className="stack">
+        <section className="panel">
+          <h2 className="section-title">Hypothèses IQPF par défaut</h2>
+          <Tableau
+            titres={["Paramètre", "Valeur"]}
+            lignes={[
+              ["Inflation", formatPourcentage(hypothesesIqpf.inflation * 100)],
+              [
+                "Croissance salariale",
+                formatPourcentage(hypothesesIqpf.croissanceSalaires * 100),
+              ],
+              [
+                "Actions canadiennes",
+                formatPourcentage(
+                  hypothesesIqpf.rendementNominal.actionsCanadiennes * 100,
+                ),
+              ],
+              [
+                "Taux d'emprunt long terme",
+                formatPourcentage(
+                  hypothesesIqpf.tauxEmprunt.hypotheseLongTerme * 100,
+                ),
+              ],
+              [
+                "Croissance immobilière",
+                formatPourcentage(
+                  hypothesesIqpf.immobilier.residencePrincipale * 100,
+                ),
+              ],
+            ]}
+          />
+        </section>
+        <section className="panel">
+          <h2 className="section-title">Repères de conseiller</h2>
+          <ul>
+            {scoreEpargne.reperes.map((repere) => (
+              <li key={repere}>{repere}</li>
+            ))}
+          </ul>
+        </section>
+      </div>
+    );
+  }
+
+  function renduContenuOnglet() {
+    switch (ongletActif) {
+      case "profil":
+        return renduProfil();
+      case "fiscalite":
+        return renduFiscalite();
+      case "accumulation":
+        return renduAccumulation();
+      case "decaissement":
+        return renduDecaissement();
+      case "hypotheque":
+        return renduHypotheque();
+      case "hypotheses":
+        return renduHypotheses();
+      case "tableau-bord":
+      default:
+        return renduTableauBord();
+    }
+  }
+
   return (
     <main className="page-shell">
       <section className="hero">
-        <span className="status-pill">Version simple pour debuter</span>
-        <h1>Planification financiere Quebec / Canada</h1>
+        <span className="status-pill">Base locale axée moteur de calcul</span>
+        <h1>Planification financière Québec / Canada</h1>
         <p>
-          Cet outil vous aide a repondre a des questions tres concretes:
-          combien il vous reste apres les prelevements, combien vous pouvez
-          accumuler dans le temps, et si votre argent risque de durer une fois
-          a la retraite.
+          Bonjour {prenomAffiche}. Cette version rassemble enfin le profil,
+          la fiscalité, l'accumulation, la retraite, l'hypothèque et les
+          hypothèses dans une même interface structurée pour un néophyte.
         </p>
         <p className="warning">
-          Si un terme vous semble technique, laissez d'abord les valeurs par
-          defaut et changez seulement une chose a la fois. L'outil est fait
-          pour apprendre progressivement, pas pour tout remplir d'un coup.
+          L'outil calcule maintenant le capital disponible au début de la
+          retraite à partir de la phase d'accumulation, puis simule RRQ, PSV,
+          retraits et récupération PSV année par année. Certaines règles
+          avancées restent à compléter, mais le parcours global est maintenant
+          beaucoup plus cohérent.
         </p>
       </section>
 
       <section className="section">
-        <h2 className="section-title">Commencez ici</h2>
-        <div className="card-grid guide-grid">
-          <TuileGuide
-            titre="1. Entrez votre revenu"
-            texte="Commencez par votre salaire annuel avant impot. C'est le point de depart le plus simple pour obtenir un premier portrait."
-          />
-          <TuileGuide
-            titre="2. Regardez ce qu'il reste"
-            texte="Le panneau de droite montre ce qui part en impots et ce qu'il vous reste vraiment apres les prelevements obligatoires."
-          />
-          <TuileGuide
-            titre="3. Testez un scenario a la fois"
-            texte="Changez ensuite soit l'hypotheque, soit l'epargne, soit la retraite. Cela permet de voir tout de suite l'effet de votre choix."
-          />
-        </div>
-      </section>
-
-      <section className="section">
-        <h2 className="section-title">Mots simples</h2>
-        <div className="card-grid guide-grid">
-          <TuileGuide
-            titre="REER"
-            texte="Un compte qui peut reduire l'impot aujourd'hui, mais dont les retraits seront imposables plus tard."
-          />
-          <TuileGuide
-            titre="CELI"
-            texte="Un compte ou la croissance et les retraits ne sont pas imposes. Tres pratique pour garder de la flexibilite."
-          />
-          <TuileGuide
-            titre="Decaissement"
-            texte="C'est simplement le fait d'utiliser votre argent accumule pour vivre plus tard, souvent a la retraite."
-          />
-        </div>
-      </section>
-
-      <section className="workspace section">
-        <div className="panel panel-form">
-          <div className="panel-header">
-            <h2 className="section-title">Vos donnees</h2>
-            <button className="secondary-button" type="button" onClick={() => setEtat(etatInitial)}>
-              Reinitialiser
+        <div className="tabs-shell">
+          {ONGLETS.map((onglet) => (
+            <button
+              key={onglet.id}
+              type="button"
+              className={`tab-button ${
+                ongletActif === onglet.id ? "is-active" : ""
+              }`}
+              onClick={() => setOngletActif(onglet.id)}
+            >
+              {onglet.label}
             </button>
-          </div>
-
-          <section className="form-section">
-            <h3>1. Votre salaire et vos retenues</h3>
-            <p className="section-copy">
-              Remplissez cette partie pour voir combien de votre salaire part en
-              impot et en cotisations, puis combien il vous reste vraiment.
-            </p>
-            <div className="field-grid">
-              <ChampNombre
-                etiquette="Votre salaire annuel avant impot"
-                valeur={etat.revenuEmploi}
-                pas={100}
-                min={0}
-                suffixe="$"
-                aide="Exemple: si vous gagnez 75 000 $ par an, inscrivez 75000."
-                onChange={(valeur) => mettreAJour("revenuEmploi", valeur)}
-              />
-              <ChampNombre
-                etiquette="Montant que vous pensez mettre dans votre REER"
-                valeur={etat.deductionREER}
-                pas={100}
-                min={0}
-                suffixe="$"
-                aide="Si vous ne savez pas, laissez 0 pour commencer."
-                onChange={(valeur) => mettreAJour("deductionREER", valeur)}
-              />
-              <ChampNombre
-                etiquette="Votre salaire de l'an dernier"
-                valeur={etat.revenuGagneAnneePrecedente}
-                pas={100}
-                min={0}
-                suffixe="$"
-                aide="Il sert surtout a estimer vos nouveaux droits REER."
-                onChange={(valeur) => mettreAJour("revenuGagneAnneePrecedente", valeur)}
-              />
-            </div>
-          </section>
-
-          <section className="form-section">
-            <h3>2. Votre espace CELI</h3>
-            <p className="section-copy">
-              Cette partie sert a estimer combien vous pouvez encore deposer
-              dans votre CELI sans depasser votre limite.
-            </p>
-            <div className="field-grid">
-              <ChampNombre
-                etiquette="Annee du calcul"
-                valeur={etat.anneeCouranteCELI}
-                min={2009}
-                max={2100}
-                onChange={(valeur) => mettreAJour("anneeCouranteCELI", valeur)}
-              />
-              <ChampNombre
-                etiquette="Votre annee de naissance"
-                valeur={etat.anneeNaissanceCELI}
-                min={1900}
-                max={2100}
-                onChange={(valeur) => mettreAJour("anneeNaissanceCELI", valeur)}
-              />
-              <ChampNombre
-                etiquette="Annee ou vous etes devenu admissible au Canada"
-                valeur={etat.anneeArriveeCanadaCELI}
-                min={1900}
-                max={2100}
-                aide="Si vous avez toujours vecu au Canada a l'age adulte, laissez une annee ancienne."
-                onChange={(valeur) => mettreAJour("anneeArriveeCanadaCELI", valeur)}
-              />
-              <ChampNombre
-                etiquette="Ancien espace CELI non utilise"
-                valeur={etat.droitsReportesCELI}
-                pas={100}
-                min={0}
-                suffixe="$"
-                onChange={(valeur) => mettreAJour("droitsReportesCELI", valeur)}
-              />
-              <ChampNombre
-                etiquette="Argent retire de votre CELI l'an dernier"
-                valeur={etat.retraitsAnneePrecedenteCELI}
-                pas={100}
-                min={0}
-                suffixe="$"
-                aide="Cet espace revient normalement disponible l'annee suivante."
-                onChange={(valeur) => mettreAJour("retraitsAnneePrecedenteCELI", valeur)}
-              />
-              <ChampNombre
-                etiquette="Total deja depose dans votre CELI"
-                valeur={etat.cotisationsCumulativesCELI}
-                pas={100}
-                min={0}
-                suffixe="$"
-                onChange={(valeur) => mettreAJour("cotisationsCumulativesCELI", valeur)}
-              />
-            </div>
-          </section>
-
-          <section className="form-section">
-            <h3>3. Votre paiement de maison</h3>
-            <p className="section-copy">
-              Entrez ici votre pret hypothecaire pour voir combien le paiement
-              risque d'etre a chaque periode.
-            </p>
-            <div className="field-grid">
-              <ChampNombre
-                etiquette="Montant encore du sur l'hypotheque"
-                valeur={etat.capitalHypotheque}
-                pas={1000}
-                min={0}
-                suffixe="$"
-                onChange={(valeur) => mettreAJour("capitalHypotheque", valeur)}
-              />
-              <ChampNombre
-                etiquette="Taux d'interet"
-                valeur={etat.tauxHypothecaire}
-                pas={0.01}
-                min={0}
-                suffixe="%"
-                onChange={(valeur) => mettreAJour("tauxHypothecaire", valeur)}
-              />
-              <ChampNombre
-                etiquette="Nombre d'annees pour rembourser"
-                valeur={etat.amortissementHypothecaire}
-                pas={1}
-                min={1}
-                suffixe="ans"
-                onChange={(valeur) => mettreAJour("amortissementHypothecaire", valeur)}
-              />
-              <ChampNombre
-                etiquette="Nombre de paiements par an"
-                valeur={etat.versementsParAnHypothecaire}
-                pas={1}
-                min={1}
-                aide="12 = un paiement par mois. 26 = aux deux semaines."
-                onChange={(valeur) => mettreAJour("versementsParAnHypothecaire", valeur)}
-              />
-            </div>
-          </section>
-
-          <section className="form-section">
-            <h3>4. Faire grandir votre argent</h3>
-            <p className="section-copy">
-              Cette partie sert a estimer ce que votre epargne pourrait devenir
-              avec le temps si vous continuez a ajouter de l'argent chaque annee.
-            </p>
-            <div className="field-grid">
-              <ChampNombre
-                etiquette="Montant deja accumule"
-                valeur={etat.valeurInitialeProjection}
-                pas={1000}
-                min={0}
-                suffixe="$"
-                onChange={(valeur) => mettreAJour("valeurInitialeProjection", valeur)}
-              />
-              <ChampNombre
-                etiquette="Montant ajoute chaque annee"
-                valeur={etat.contributionAnnuelleProjection}
-                pas={100}
-                min={0}
-                suffixe="$"
-                onChange={(valeur) => mettreAJour("contributionAnnuelleProjection", valeur)}
-              />
-              <ChampNombre
-                etiquette="Croissance annuelle moyenne esperee"
-                valeur={etat.rendementAnnuelProjection}
-                pas={0.1}
-                suffixe="%"
-                aide="Si vous ne savez pas, gardez la valeur par defaut."
-                onChange={(valeur) => mettreAJour("rendementAnnuelProjection", valeur)}
-              />
-              <ChampNombre
-                etiquette="Pendant combien d'annees"
-                valeur={etat.nombreAnneesProjection}
-                pas={1}
-                min={1}
-                max={80}
-                onChange={(valeur) => mettreAJour("nombreAnneesProjection", valeur)}
-              />
-            </div>
-          </section>
-
-          <section className="form-section">
-            <h3>5. Utiliser votre argent plus tard</h3>
-            <p className="section-copy">
-              Cette partie simule une retraite simple: vous retirez un montant
-              chaque annee et l'outil verifie si votre capital tient le coup.
-            </p>
-            <div className="field-grid">
-              <ChampNombre
-                etiquette="Montant disponible au debut de la retraite"
-                valeur={etat.capitalInitialDecaissement}
-                pas={1000}
-                min={0}
-                suffixe="$"
-                onChange={(valeur) => mettreAJour("capitalInitialDecaissement", valeur)}
-              />
-              <ChampNombre
-                etiquette="Montant retire la premiere annee"
-                valeur={etat.retraitAnnuelInitialDecaissement}
-                pas={100}
-                min={0}
-                suffixe="$"
-                onChange={(valeur) => mettreAJour("retraitAnnuelInitialDecaissement", valeur)}
-              />
-              <ChampNombre
-                etiquette="Croissance annuelle moyenne du capital"
-                valeur={etat.rendementAnnuelDecaissement}
-                pas={0.1}
-                suffixe="%"
-                onChange={(valeur) => mettreAJour("rendementAnnuelDecaissement", valeur)}
-              />
-              <ChampNombre
-                etiquette="Hausse annuelle du montant retire"
-                valeur={etat.indexationRetraitDecaissement}
-                pas={0.1}
-                suffixe="%"
-                aide="Exemple: 2 % pour suivre grossierement l'inflation."
-                onChange={(valeur) => mettreAJour("indexationRetraitDecaissement", valeur)}
-              />
-              <ChampNombre
-                etiquette="Nombre d'annees a couvrir"
-                valeur={etat.nombreAnneesDecaissement}
-                pas={1}
-                min={1}
-                max={80}
-                onChange={(valeur) => mettreAJour("nombreAnneesDecaissement", valeur)}
-              />
-            </div>
-          </section>
-        </div>
-
-        <div className="panel panel-results">
-          <div className="panel-header">
-            <h2 className="section-title">Ce que vos chiffres veulent dire</h2>
-            <span className="result-badge">Calcul en direct</span>
-          </div>
-
-          <div className="card-grid guide-grid">
-            <CarteExplication
-              titre="En bref sur votre revenu"
-              texte={`Environ ${formatPourcentage(tauxPrelevementGlobal)} de votre salaire part en impots et cotisations dans ce scenario. ${calculerTexteCapaciteEpargne(revenuApresImpotEtCotisations)}`}
-            />
-            <CarteExplication
-              titre="En bref sur votre hypotheque"
-              texte={`Le paiement estime revient a environ ${formatMonetaire(equivalentMensuelHypotheque)} par mois. ${calculerTexteHypotheque(paiementHypothecaire, etat.versementsParAnHypothecaire)}`}
-            />
-            <CarteExplication
-              titre="En bref sur la retraite"
-              texte={calculerTexteDecaissement(
-                simulationDecaissement.capitalEpuise,
-                simulationDecaissement.anneeEpuisement,
-              )}
-            />
-          </div>
-
-          <div className="card-grid result-grid">
-            <CarteResultat
-              titre="Total des impots"
-              valeur={formatMonetaire(totalImpot)}
-              description="Montant estime qui partirait en impot federal et provincial."
-              detail={`Federal ${formatMonetaire(impotFederal.impotNet)} + Quebec ${formatMonetaire(impotQuebec.impotNet)}`}
-            />
-            <CarteResultat
-              titre="Autres retenues obligatoires"
-              valeur={formatMonetaire(cotisations.totalPersonnel)}
-              description="Montant estime des cotisations sur la paie."
-              detail={`RRQ ${formatMonetaire(cotisations.rrqBase + cotisations.rrqSupplementaire1 + cotisations.rrqSupplementaire2)} | RQAP ${formatMonetaire(cotisations.rqap)} | AE ${formatMonetaire(cotisations.assuranceEmploi)}`}
-            />
-            <CarteResultat
-              titre="Ce qu'il vous reste apres prelevements"
-              valeur={formatMonetaire(revenuApresImpotEtCotisations)}
-              description="Argent restant apres impots et cotisations, avant vos autres depenses de vie."
-            />
-            <CarteResultat
-              titre="Nouvel espace REER estime"
-              valeur={formatMonetaire(droitsREER)}
-              description="Estimation de l'espace REER cree a partir du salaire de l'an dernier."
-            />
-            <CarteResultat
-              titre="Espace CELI disponible"
-              valeur={formatMonetaire(droitsCELI)}
-              description="Montant que vous pourriez encore mettre dans votre CELI selon les donnees saisies."
-            />
-            <CarteResultat
-              titre="Paiement hypothecaire"
-              valeur={formatMonetaire(paiementHypothecaire)}
-              description="Montant estime a chaque paiement."
-              detail={`${etat.versementsParAnHypothecaire} paiements / an, soit environ ${formatMonetaire(equivalentMensuelHypotheque)} par mois`}
-            />
-            <CarteResultat
-              titre="Valeur future de votre epargne"
-              valeur={formatMonetaire(projection)}
-              description="Montant que votre capital pourrait atteindre si ce rythme continue."
-              detail={`Gain estime attribuable a la croissance: ${formatMonetaire(gainProjete)}`}
-            />
-            <CarteResultat
-              titre="Capital restant a la fin"
-              valeur={formatMonetaire(simulationDecaissement.capitalFinal)}
-              description="Somme estimee qu'il resterait apres la periode de retraite choisie."
-              detail={
-                simulationDecaissement.capitalEpuise
-                  ? `Capital epuise vers l'an ${simulationDecaissement.anneeEpuisement}.`
-                  : "Capital encore positif a la fin de l'horizon."
-              }
-              tonalite={simulationDecaissement.capitalEpuise ? "alert" : "success"}
-            />
-          </div>
-
-          <section className="card notes-card">
-            <h3>Hypotheses de base utilisees</h3>
-            <div className="notes-grid">
-              <div>
-                <span className="note-label">Inflation</span>
-                <strong>{formatPourcentage(hypothesesIqpf2026.inflation * 100)}</strong>
-              </div>
-              <div>
-                <span className="note-label">Croissance salariale</span>
-                <strong>{formatPourcentage(hypothesesIqpf2026.croissanceSalaires * 100)}</strong>
-              </div>
-              <div>
-                <span className="note-label">Actions canadiennes</span>
-                <strong>{formatPourcentage(hypothesesIqpf2026.rendementNominal.actionsCanadiennes * 100)}</strong>
-              </div>
-              <div>
-                <span className="note-label">Taux d'emprunt LT</span>
-                <strong>{formatPourcentage(hypothesesIqpf2026.tauxEmprunt.hypotheseLongTerme * 100)}</strong>
-              </div>
-            </div>
-          </section>
+          ))}
+          <button type="button" className="secondary-button" onClick={reinitialiser}>
+            Réinitialiser
+          </button>
         </div>
       </section>
 
-      <section className="section">
-        <div className="panel">
-          <div className="panel-header">
-            <h2 className="section-title">Graphiques faciles a lire</h2>
-            <span className="result-badge">Vue d'ensemble</span>
-          </div>
-          <div className="chart-grid">
-            <CarteGraphique
-              titre="Ou va votre salaire"
-              description="Ce graphique montre ce qui part en impots, en cotisations, et ce qu'il vous reste."
-            >
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={donneesVentilationFiscale}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(82, 64, 43, 0.12)" />
-                  <XAxis dataKey="nom" tick={{ fill: "#675b4f", fontSize: 12 }} />
-                  <YAxis tickFormatter={formatCompact} tick={{ fill: "#675b4f", fontSize: 12 }} />
-                  <Tooltip formatter={(valeur: number | string) => formatMonetaire(Number(valeur))} />
-                  <Bar dataKey="montant" fill="#0f766e" radius={[8, 8, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CarteGraphique>
-
-            <CarteGraphique
-              titre="Comment votre epargne peut grandir"
-              description="La ligne principale montre la valeur totale estimee de votre epargne avec le temps."
-            >
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={donneesProjection}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(82, 64, 43, 0.12)" />
-                  <XAxis dataKey="annee" tick={{ fill: "#675b4f", fontSize: 12 }} />
-                  <YAxis tickFormatter={formatCompact} tick={{ fill: "#675b4f", fontSize: 12 }} />
-                  <Tooltip formatter={(valeur: number | string) => formatMonetaire(Number(valeur))} />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="valeurFin"
-                    stroke="#0f766e"
-                    strokeWidth={3}
-                    dot={false}
-                    name="Valeur finale"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="croissance"
-                    stroke="#b45309"
-                    strokeWidth={2}
-                    dot={false}
-                    name="Croissance annuelle"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </CarteGraphique>
-
-            <CarteGraphique
-              titre="Est-ce que votre argent durerait"
-              description="La zone verte montre l'argent restant. La ligne orange montre ce que vous retirez chaque annee."
-            >
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={donneesDecaissement}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(82, 64, 43, 0.12)" />
-                  <XAxis dataKey="annee" tick={{ fill: "#675b4f", fontSize: 12 }} />
-                  <YAxis tickFormatter={formatCompact} tick={{ fill: "#675b4f", fontSize: 12 }} />
-                  <Tooltip formatter={(valeur: number | string) => formatMonetaire(Number(valeur))} />
-                  <Legend />
-                  <Area
-                    type="monotone"
-                    dataKey="capitalFin"
-                    stroke="#0f766e"
-                    fill="rgba(15, 118, 110, 0.24)"
-                    name="Capital restant"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="retrait"
-                    stroke="#b45309"
-                    strokeWidth={2}
-                    dot={false}
-                    name="Retrait annuel"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </CarteGraphique>
-          </div>
-        </div>
-      </section>
+      <section className="section">{renduContenuOnglet()}</section>
     </main>
   );
 }
