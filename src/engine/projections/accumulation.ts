@@ -1,26 +1,33 @@
-import type { ProfilUtilisateurMinimal } from "../types";
 import {
   calculerTableauAmortissementHypothecaireCanadien,
+  type EntreeHypotheque,
 } from "../mortgage/canadian-amortization";
 import { calculerImpotFederal2025 } from "../tax/federal";
 import { calculerCotisationsSociales2025 } from "../tax/payroll";
-import { arrondir2 } from "../tax/shared";
 import { calculerImpotQuebec2025 } from "../tax/quebec";
+import { arrondir2 } from "../tax/shared";
+import type { ProfilUtilisateurMinimal } from "../types";
 
 export interface EntreeAccumulation {
   profil: ProfilUtilisateurMinimal;
   anneeCourante: number;
   revenuEmploiActuel: number;
+  bonusAnnuelActuel?: number;
   autresRevenusImposables?: number;
+  dividendesTrimestrielsActuels?: number;
   depensesAnnuellesActuelles?: number;
   cotisationReerAnnuelle?: number;
   cotisationCeliAnnuelle?: number;
   cotisationNonEnregistreeAnnuelle?: number;
+  indexerCotisationReerAvecSalaire?: boolean;
   soldeReerInitial?: number;
   soldeCeliInitial?: number;
   soldeNonEnregistreInitial?: number;
   valeurImmobiliereInitiale?: number;
+  partUtilisateurImmobilier?: number;
   soldeHypothecaireInitial?: number;
+  coutAcquisitionImmobilier?: number;
+  anneeAchatImmobilier?: number;
   tauxHypothecaire?: number;
   amortissementHypothecaireAnnees?: number;
   versementsHypothecairesParAn?: number;
@@ -35,8 +42,11 @@ export interface EntreeAccumulation {
 export interface PointAccumulation {
   annee: number;
   age: number;
+  salaireBase: number;
+  bonusAnnuel: number;
   revenuEmploi: number;
   autresRevenusImposables: number;
+  dividendesAnnuels: number;
   cotisationsSociales: number;
   impotFederal: number;
   impotQuebec: number;
@@ -68,11 +78,24 @@ export interface ResultatAccumulation {
   soldeHypothecaireRetraite: number;
   valeurNetteImmobiliereRetraite: number;
   valeurNetteTotaleRetraite: number;
+  depensesProjeteesRetraite: number;
+  serviceHypothecaireRetraiteEstime: number;
+  objectifDecaissementSuggereRetraite: number;
   points: PointAccumulation[];
 }
 
-function determinerEntreeHypothecaire(entree: EntreeAccumulation) {
-  const capitalInitial = Math.max(0, entree.soldeHypothecaireInitial ?? 0);
+function bornerProportion(valeur: number | undefined, defaut = 1): number {
+  return Math.min(1, Math.max(0, valeur ?? defaut));
+}
+
+function determinerEntreeHypothecaire(
+  entree: EntreeAccumulation,
+): EntreeHypotheque | null {
+  const partUtilisateurImmobilier = bornerProportion(
+    entree.partUtilisateurImmobilier,
+  );
+  const capitalInitial =
+    Math.max(0, entree.soldeHypothecaireInitial ?? 0) * partUtilisateurImmobilier;
   const tauxNominalAnnuel = Math.max(0, entree.tauxHypothecaire ?? 0);
   const anneesAmortissement = Math.max(
     0,
@@ -80,7 +103,7 @@ function determinerEntreeHypothecaire(entree: EntreeAccumulation) {
   );
   const versementsParAn = Math.max(1, entree.versementsHypothecairesParAn ?? 12);
 
-  if (capitalInitial <= 0 || anneesAmortissement <= 0) {
+  if (capitalInitial <= 0 || anneesAmortissement <= 0 || tauxNominalAnnuel < 0) {
     return null;
   }
 
@@ -94,11 +117,24 @@ function determinerEntreeHypothecaire(entree: EntreeAccumulation) {
 
 /**
  * Projection annuelle d'accumulation jusqu'au début de la retraite.
+ *
+ * Hypothèses de travail de cette version :
+ * - les tables fiscales 2025 sont réutilisées comme base de projection ;
+ * - les cotisations sont versées en fin d'année ;
+ * - la croissance des comptes s'applique sur le solde de début d'année ;
+ * - le bonus suit la même croissance que le salaire ;
+ * - les dividendes trimestriels sont convertis en revenu annuel imposable ;
+ * - la part immobilière appliquée représente la quote-part de l'utilisateur
+ *   à la fois dans la valeur de la maison et dans l'hypothèque ;
+ * - la retraite débute le 1er janvier de l'année suivant la dernière année simulée.
  */
 export function projeterAccumulationJusquaRetraite(
   entree: EntreeAccumulation,
 ): ResultatAccumulation {
   const { profil } = entree;
+  const partUtilisateurImmobilier = bornerProportion(
+    entree.partUtilisateurImmobilier,
+  );
   const entreeHypothecaire = determinerEntreeHypothecaire(entree);
 
   if (profil.ageRetraite <= profil.ageActuel) {
@@ -106,29 +142,38 @@ export function projeterAccumulationJusquaRetraite(
   }
 
   const nombreAnneesProjection = profil.ageRetraite - profil.ageActuel;
-  const autresRevenusImposables = Math.max(0, entree.autresRevenusImposables ?? 0);
-  const cotisationReer = Math.max(0, entree.cotisationReerAnnuelle ?? 0);
+  const autresRevenusImposablesBase = Math.max(
+    0,
+    entree.autresRevenusImposables ?? 0,
+  );
+  const dividendesAnnuels = Math.max(0, entree.dividendesTrimestrielsActuels ?? 0) * 4;
   const cotisationCeli = Math.max(0, entree.cotisationCeliAnnuelle ?? 0);
   const cotisationNonEnregistree = Math.max(
     0,
     entree.cotisationNonEnregistreeAnnuelle ?? 0,
   );
-  const epargneTotale = cotisationReer + cotisationCeli + cotisationNonEnregistree;
+  const indexerCotisationReerAvecSalaire =
+    entree.indexerCotisationReerAvecSalaire ?? true;
   const lignesHypotheque = entreeHypothecaire
     ? calculerTableauAmortissementHypothecaireCanadien(entreeHypothecaire)
     : [];
   const versementsParAn = Math.max(1, entree.versementsHypothecairesParAn ?? 12);
   const points: PointAccumulation[] = [];
-  let revenuEmploi = Math.max(0, entree.revenuEmploiActuel);
+  let salaireBase = Math.max(0, entree.revenuEmploiActuel);
+  let bonusAnnuel = Math.max(0, entree.bonusAnnuelActuel ?? 0);
+  let cotisationReer = Math.max(0, entree.cotisationReerAnnuelle ?? 0);
   let depensesAnnuelles = Math.max(0, entree.depensesAnnuellesActuelles ?? 0);
   let soldeReer = Math.max(0, entree.soldeReerInitial ?? 0);
   let soldeCeli = Math.max(0, entree.soldeCeliInitial ?? 0);
   let soldeNonEnregistre = Math.max(0, entree.soldeNonEnregistreInitial ?? 0);
-  let valeurImmobiliere = Math.max(0, entree.valeurImmobiliereInitiale ?? 0);
+  let valeurImmobiliere =
+    Math.max(0, entree.valeurImmobiliereInitiale ?? 0) * partUtilisateurImmobilier;
 
   for (let index = 0; index < nombreAnneesProjection; index += 1) {
     const annee = entree.anneeCourante + index;
     const age = profil.ageActuel + index;
+    const revenuEmploi = salaireBase + bonusAnnuel;
+    const autresRevenusImposables = autresRevenusImposablesBase + dividendesAnnuels;
     const cotisations = calculerCotisationsSociales2025({
       revenuTravail: revenuEmploi,
     });
@@ -145,7 +190,12 @@ export function projeterAccumulationJusquaRetraite(
     });
     const impotTotal = impotFederal.impotNet + impotQuebec.impotNet;
     const revenuNetApresImpot =
-      revenuEmploi + autresRevenusImposables - impotTotal - cotisations.totalPersonnel;
+      revenuEmploi +
+      autresRevenusImposables -
+      impotTotal -
+      cotisations.totalPersonnel;
+    const epargneTotale =
+      cotisationReer + cotisationCeli + cotisationNonEnregistree;
     const debutPeriodeVersement = index * versementsParAn;
     const finPeriodeVersementExclusive = (index + 1) * versementsParAn;
     const lignesAnnuellesHypotheque = lignesHypotheque.slice(
@@ -163,7 +213,8 @@ export function projeterAccumulationJusquaRetraite(
         : 0;
     const croissanceReer = soldeReer * entree.rendementReer;
     const croissanceCeli = soldeCeli * entree.rendementCeli;
-    const croissanceNonEnregistre = soldeNonEnregistre * entree.rendementNonEnregistre;
+    const croissanceNonEnregistre =
+      soldeNonEnregistre * entree.rendementNonEnregistre;
 
     soldeReer = soldeReer + croissanceReer + cotisationReer;
     soldeCeli = soldeCeli + croissanceCeli + cotisationCeli;
@@ -172,7 +223,10 @@ export function projeterAccumulationJusquaRetraite(
     valeurImmobiliere = valeurImmobiliere * (1 + entree.croissanceImmobiliere);
 
     const margeBudgetaire =
-      revenuNetApresImpot - depensesAnnuelles - serviceHypothecaireAnnuel - epargneTotale;
+      revenuNetApresImpot -
+      depensesAnnuelles -
+      serviceHypothecaireAnnuel -
+      epargneTotale;
     const valeurNetteImmobiliereFin = valeurImmobiliere - soldeHypothecaireFin;
     const valeurNetteTotaleFin =
       soldeReer + soldeCeli + soldeNonEnregistre + valeurNetteImmobiliereFin;
@@ -180,8 +234,11 @@ export function projeterAccumulationJusquaRetraite(
     points.push({
       annee,
       age,
+      salaireBase: arrondir2(salaireBase),
+      bonusAnnuel: arrondir2(bonusAnnuel),
       revenuEmploi: arrondir2(revenuEmploi),
-      autresRevenusImposables: arrondir2(autresRevenusImposables),
+      autresRevenusImposables: arrondir2(autresRevenusImposablesBase),
+      dividendesAnnuels: arrondir2(dividendesAnnuels),
       cotisationsSociales: cotisations.totalPersonnel,
       impotFederal: impotFederal.impotNet,
       impotQuebec: impotQuebec.impotNet,
@@ -203,11 +260,30 @@ export function projeterAccumulationJusquaRetraite(
       valeurNetteTotaleFin: arrondir2(valeurNetteTotaleFin),
     });
 
-    revenuEmploi *= 1 + entree.croissanceSalaire;
+    salaireBase *= 1 + entree.croissanceSalaire;
+    bonusAnnuel *= 1 + entree.croissanceSalaire;
     depensesAnnuelles *= 1 + entree.inflation;
+
+    if (indexerCotisationReerAvecSalaire) {
+      cotisationReer *= 1 + entree.croissanceSalaire;
+    }
   }
 
   const dernierPoint = points[points.length - 1];
+  const debutRetraiteVersement = nombreAnneesProjection * versementsParAn;
+  const finRetraiteVersementExclusive =
+    (nombreAnneesProjection + 1) * versementsParAn;
+  const lignesRetraiteHypotheque = lignesHypotheque.slice(
+    debutRetraiteVersement,
+    finRetraiteVersementExclusive,
+  );
+  const serviceHypothecaireRetraiteEstime = arrondir2(
+    lignesRetraiteHypotheque.reduce((total, ligne) => total + ligne.paiement, 0),
+  );
+  const depensesProjeteesRetraite = arrondir2(depensesAnnuelles);
+  const objectifDecaissementSuggereRetraite = arrondir2(
+    depensesProjeteesRetraite + serviceHypothecaireRetraiteEstime,
+  );
 
   return {
     anneeRetraite: entree.anneeCourante + nombreAnneesProjection,
@@ -217,8 +293,12 @@ export function projeterAccumulationJusquaRetraite(
     capitalNonEnregistreRetraite: dernierPoint?.soldeNonEnregistreFin ?? 0,
     valeurImmobiliereRetraite: dernierPoint?.valeurImmobiliereFin ?? 0,
     soldeHypothecaireRetraite: dernierPoint?.soldeHypothecaireFin ?? 0,
-    valeurNetteImmobiliereRetraite: dernierPoint?.valeurNetteImmobiliereFin ?? 0,
+    valeurNetteImmobiliereRetraite:
+      dernierPoint?.valeurNetteImmobiliereFin ?? 0,
     valeurNetteTotaleRetraite: dernierPoint?.valeurNetteTotaleFin ?? 0,
+    depensesProjeteesRetraite,
+    serviceHypothecaireRetraiteEstime,
+    objectifDecaissementSuggereRetraite,
     points,
   };
 }
