@@ -1,4 +1,21 @@
 export type StatutTravail = "salarie" | "autonome";
+export type ProvinceResidence = "QC" | "AUTRE";
+export type StatutMarital =
+  | "celibataire"
+  | "marie"
+  | "conjoint_de_fait"
+  | "divorce"
+  | "veuf";
+
+export interface ProfilUtilisateurMinimal {
+  prenom?: string;
+  ageActuel: number;
+  anneeNaissance: number;
+  ageRetraite: number;
+  esperanceVie: number;
+  provinceResidence: ProvinceResidence;
+  statutMarital: StatutMarital;
+}
 
 export interface CotisationsSociales2025 {
   revenuTravail: number;
