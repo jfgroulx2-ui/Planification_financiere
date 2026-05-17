@@ -51,8 +51,8 @@ export interface EntreeDecaissementRetraite {
   nombreAnnees: number;
   ageDebutRrq?: number;
   proportionCotisationRrq?: number;
-  ageDebutPsv?: number;
   anneesResidenceCanadaApres18?: number;
+  ageDebutPsv?: number;
   strategie?: StrategieDecaissement;
 }
 
@@ -167,6 +167,7 @@ function calculerRetraitsClassiques(
  * Hypothèses de travail :
  * - stratégie classique : non enregistré, puis REER/FERR, puis CELI ;
  * - RRQ et PSV sont estimés automatiquement selon les paramètres d'entrée ;
+ * - les retraits REER/FERR sont comptés comme du revenu imposable ;
  * - la récupération PSV est calculée à 15 % de l'excédent au-delà du seuil ;
  * - les retraits non enregistrés sont traités comme non imposables dans cette V1 ;
  * - la maison peut être vendue à un âge donné, et le produit net est versé
