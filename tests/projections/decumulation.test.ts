@@ -91,4 +91,26 @@ describe("simulerDecaissementAnnuel", () => {
       260000,
     );
   });
+
+  it("traite le retrait REER comme un revenu imposable", () => {
+    const resultat = simulerDecaissementRetraite({
+      anneeDebut: 2035,
+      ageDebut: 60,
+      soldeReerInitial: 20000,
+      soldeCeliInitial: 0,
+      soldeNonEnregistreInitial: 0,
+      retraitAnnuelCibleInitial: 10000,
+      rendementReer: 0,
+      rendementCeli: 0,
+      rendementNonEnregistre: 0,
+      indexationRetrait: 0,
+      nombreAnnees: 1,
+      ageDebutRrq: 65,
+      ageDebutPsv: 65,
+    });
+
+    expect(resultat.points[0]?.retraitReer).toBe(10000);
+    expect(resultat.points[0]?.revenuImposableTotal).toBe(10000);
+    expect(resultat.points[0]?.impotTotal).toBeGreaterThan(0);
+  });
 });
