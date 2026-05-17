@@ -146,4 +146,67 @@ describe("projeterAccumulationJusquaRetraite", () => {
     expect(resultat.soldeHypothecaireRetraite).toBe(0);
     expect(resultat.valeurNetteImmobiliereRetraite).toBe(300000);
   });
+
+  it("peut indexer les dividendes annuels dans la projection", () => {
+    const resultat = projeterAccumulationJusquaRetraite({
+      profil: {
+        ageActuel: 40,
+        anneeNaissance: 1986,
+        ageRetraite: 42,
+        esperanceVie: 95,
+        provinceResidence: "QC",
+        statutMarital: "celibataire",
+      },
+      anneeCourante: 2026,
+      revenuEmploiActuel: 0,
+      dividendesTrimestrielsActuels: 100,
+      croissanceDividendes: 0.1,
+      depensesAnnuellesActuelles: 0,
+      cotisationReerAnnuelle: 0,
+      cotisationCeliAnnuelle: 0,
+      cotisationNonEnregistreeAnnuelle: 0,
+      croissanceSalaire: 0,
+      inflation: 0,
+      rendementReer: 0,
+      rendementCeli: 0,
+      rendementNonEnregistre: 0,
+      croissanceImmobiliere: 0,
+    });
+
+    expect(resultat.points[0]?.dividendesAnnuels).toBe(400);
+    expect(resultat.points[1]?.dividendesAnnuels).toBe(440);
+  });
+
+  it("reduit les depenses futures apres la fin de l'hypotheque", () => {
+    const resultat = projeterAccumulationJusquaRetraite({
+      profil: {
+        ageActuel: 40,
+        anneeNaissance: 1986,
+        ageRetraite: 42,
+        esperanceVie: 95,
+        provinceResidence: "QC",
+        statutMarital: "celibataire",
+      },
+      anneeCourante: 2026,
+      revenuEmploiActuel: 0,
+      depensesAnnuellesActuelles: 1000,
+      partDepensesLogementApresHypotheque: 0.25,
+      soldeHypothecaireInitial: 1200,
+      tauxHypothecaire: 0,
+      amortissementHypothecaireAnnees: 1,
+      versementsHypothecairesParAn: 12,
+      cotisationReerAnnuelle: 0,
+      cotisationCeliAnnuelle: 0,
+      cotisationNonEnregistreeAnnuelle: 0,
+      croissanceSalaire: 0,
+      inflation: 0,
+      rendementReer: 0,
+      rendementCeli: 0,
+      rendementNonEnregistre: 0,
+      croissanceImmobiliere: 0,
+    });
+
+    expect(resultat.points[0]?.depensesAnnuelles).toBe(1000);
+    expect(resultat.depensesProjeteesRetraite).toBe(750);
+  });
 });
