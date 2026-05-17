@@ -13,9 +13,13 @@ export interface EntreeAccumulation {
   anneeCourante: number;
   revenuEmploiActuel: number;
   bonusAnnuelActuel?: number;
+  tauxRealisationBonus?: number;
   autresRevenusImposables?: number;
   dividendesTrimestrielsActuels?: number;
+  tauxRealisationDividendes?: number;
+  croissanceDividendes?: number;
   depensesAnnuellesActuelles?: number;
+  partDepensesLogementApresHypotheque?: number;
   cotisationReerAnnuelle?: number;
   cotisationCeliAnnuelle?: number;
   cotisationNonEnregistreeAnnuelle?: number;
@@ -124,8 +128,11 @@ function determinerEntreeHypothecaire(
  * - la croissance des comptes s'applique sur le solde de début d'année ;
  * - le bonus suit la même croissance que le salaire ;
  * - les dividendes trimestriels sont convertis en revenu annuel imposable ;
+ * - un taux de réalisation peut être appliqué au boni et aux dividendes
+ *   pour modéliser des revenus variables non garantis ;
  * - la part immobilière appliquée représente la quote-part de l'utilisateur
  *   à la fois dans la valeur de la maison et dans l'hypothèque ;
+ * - une partie des dépenses peut disparaître une fois l'hypothèque terminée ;
  * - la retraite débute le 1er janvier de l'année suivant la dernière année simulée.
  */
 export function projeterAccumulationJusquaRetraite(
@@ -146,7 +153,15 @@ export function projeterAccumulationJusquaRetraite(
     0,
     entree.autresRevenusImposables ?? 0,
   );
-  const dividendesAnnuels = Math.max(0, entree.dividendesTrimestrielsActuels ?? 0) * 4;
+  const tauxRealisationBonus = bornerProportion(entree.tauxRealisationBonus);
+  const tauxRealisationDividendes = bornerProportion(
+    entree.tauxRealisationDividendes,
+  );
+  const croissanceDividendes = entree.croissanceDividendes ?? 0;
+  const partDepensesLogementApresHypotheque = bornerProportion(
+    entree.partDepensesLogementApresHypotheque,
+    0,
+  );
   const cotisationCeli = Math.max(0, entree.cotisationCeliAnnuelle ?? 0);
   const cotisationNonEnregistree = Math.max(
     0,
@@ -157,10 +172,16 @@ export function projeterAccumulationJusquaRetraite(
   const lignesHypotheque = entreeHypothecaire
     ? calculerTableauAmortissementHypothecaireCanadien(entreeHypothecaire)
     : [];
+  const aUneHypotheque = entreeHypothecaire !== null;
   const versementsParAn = Math.max(1, entree.versementsHypothecairesParAn ?? 12);
   const points: PointAccumulation[] = [];
   let salaireBase = Math.max(0, entree.revenuEmploiActuel);
-  let bonusAnnuel = Math.max(0, entree.bonusAnnuelActuel ?? 0);
+  let bonusAnnuel =
+    Math.max(0, entree.bonusAnnuelActuel ?? 0) * tauxRealisationBonus;
+  let dividendesAnnuels =
+    Math.max(0, entree.dividendesTrimestrielsActuels ?? 0) *
+    4 *
+    tauxRealisationDividendes;
   let cotisationReer = Math.max(0, entree.cotisationReerAnnuelle ?? 0);
   let depensesAnnuelles = Math.max(0, entree.depensesAnnuellesActuelles ?? 0);
   let soldeReer = Math.max(0, entree.soldeReerInitial ?? 0);
@@ -168,12 +189,14 @@ export function projeterAccumulationJusquaRetraite(
   let soldeNonEnregistre = Math.max(0, entree.soldeNonEnregistreInitial ?? 0);
   let valeurImmobiliere =
     Math.max(0, entree.valeurImmobiliereInitiale ?? 0) * partUtilisateurImmobilier;
+  let reductionDepensesAppliquee = false;
 
   for (let index = 0; index < nombreAnneesProjection; index += 1) {
     const annee = entree.anneeCourante + index;
     const age = profil.ageActuel + index;
     const revenuEmploi = salaireBase + bonusAnnuel;
-    const autresRevenusImposables = autresRevenusImposablesBase + dividendesAnnuels;
+    const autresRevenusImposables =
+      autresRevenusImposablesBase + dividendesAnnuels;
     const cotisations = calculerCotisationsSociales2025({
       revenuTravail: revenuEmploi,
     });
@@ -237,7 +260,7 @@ export function projeterAccumulationJusquaRetraite(
       salaireBase: arrondir2(salaireBase),
       bonusAnnuel: arrondir2(bonusAnnuel),
       revenuEmploi: arrondir2(revenuEmploi),
-      autresRevenusImposables: arrondir2(autresRevenusImposablesBase),
+      autresRevenusImposables: arrondir2(autresRevenusImposables),
       dividendesAnnuels: arrondir2(dividendesAnnuels),
       cotisationsSociales: cotisations.totalPersonnel,
       impotFederal: impotFederal.impotNet,
@@ -262,7 +285,19 @@ export function projeterAccumulationJusquaRetraite(
 
     salaireBase *= 1 + entree.croissanceSalaire;
     bonusAnnuel *= 1 + entree.croissanceSalaire;
+
+    if (
+      aUneHypotheque &&
+      !reductionDepensesAppliquee &&
+      soldeHypothecaireFin <= 0 &&
+      partDepensesLogementApresHypotheque > 0
+    ) {
+      depensesAnnuelles *= 1 - partDepensesLogementApresHypotheque;
+      reductionDepensesAppliquee = true;
+    }
+
     depensesAnnuelles *= 1 + entree.inflation;
+    dividendesAnnuels *= 1 + croissanceDividendes;
 
     if (indexerCotisationReerAvecSalaire) {
       cotisationReer *= 1 + entree.croissanceSalaire;
